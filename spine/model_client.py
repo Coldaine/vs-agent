@@ -45,7 +45,7 @@ def _endpoint(role: str) -> tuple[str, str, str]:
     """Return the fixed provider endpoint and injected credential for a role."""
     role = role.upper()
     provider = (_FREE_OPENROUTER_VISION
-                if role in {"FOLLOWER", "LABELER"}
+                if role in {"FOLLOWER", "LABELER", "AUDITOR"}
                 else _DIRECT_DEEPSEEK)
     key = os.environ.get(provider["key_name"])
     if not key:
@@ -232,7 +232,7 @@ def call_auditor(frame_path: str, rubric_pointer: str, primary: dict) -> dict:
     messages = [{"role": "user", "content": [
         {"type": "text", "text": user},
         _image_content(frame_path)]}]
-    content = _chat("LABELER", messages, "call_auditor",
+    content = _chat("AUDITOR", messages, "call_auditor",
                     _hash(user), max_tokens=400)
     out = _parse_json(content)
     out.setdefault("agrees", True)

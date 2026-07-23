@@ -6,6 +6,10 @@ status/*.png
 __pycache__/
 *.pyc
 
+# --- virtual environment and credentials ---
+.venv/
+.env
+
 # --- append-only logs written at runtime ---
 model_calls.jsonl
 protocol_violations.jsonl

@@ -16,6 +16,7 @@ return all inputs to neutral. run.py calls it in every termination path.
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
+import time
 import numpy as np
 
 DIRECTIONS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW", "HOLD"]
@@ -148,6 +149,17 @@ class IOAdapter:
 
     def click(self, x: int, y: int) -> None:
         self._keys.click(x, y)
+
+    def ocr(self, region: tuple = None) -> str:
+        """OCR the current frame or a region [x0, y0, x1, y1].
+        Returns text string. Used by launch.py for menu checkpoints."""
+        import pytesseract
+        frame = self.screenshot()
+        img = frame.image
+        if region:
+            x0, y0, x1, y1 = region
+            img = img[y0:y1, x0:x1]
+        return pytesseract.image_to_string(img)
 
     # --- perception helpers ---
     def ocr(self, region: Optional[tuple] = None) -> str:

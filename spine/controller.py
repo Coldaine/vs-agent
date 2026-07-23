@@ -38,7 +38,7 @@ class Controller:
 
     # --- the tick, per docs/controller.md ---
     def tick(self, dets: list[reflex.Detection], player: reflex.Detection,
-             screen_type: str) -> TickResult:
+             screen_type: str, strafe: bool = False) -> TickResult:
         if screen_type == "LEVEL_UP":
             self.io.hold_direction("HOLD")
             return TickResult("HOLD", "level_up", None, False)
@@ -52,14 +52,19 @@ class Controller:
             proposal = reflex.escape_vector(dets, player, self.cfg["escape_vector_k"])
             rule = "veto"
 
-        # 4. STALE
+        # 4. STALE / REFLEX-ONLY
         if proposal is None:
             threat = reflex.nearest_threat(dets, player)
-            if threat and threat[0] < self.cfg["collision_radius_px"] * 1.5:
+            if threat and threat[0] < self.cfg["collision_radius_px"] * 2.0:
                 proposal = reflex.escape_vector(dets, player, self.cfg["escape_vector_k"])
+                rule = "veto" if strafe else "stale"
+            elif strafe:
+                # G1 Blind Strafe: left/right oscillation
+                proposal = "E" if (int(time.monotonic()) % 6) < 3 else "W"
+                rule = "clean"
             else:
                 proposal = self._current_heading      # keep drifting
-            rule = "stale"
+                rule = "stale"
 
         # 5. DITHER
         if (proposal != self._current_heading

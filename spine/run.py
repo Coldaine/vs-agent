@@ -41,26 +41,32 @@ def follower_loop(io, controller, cfg, stop, prompt_text, shared):
             time.sleep(0.1)
 
 
-def run_episode(eval_mode: bool):
+def run_episode(eval_mode: bool, reflex_only: bool = False, disable_leader: bool = False):
     cfg = yaml.safe_load(open("spine/config.yaml"))
     io = IOAdapter(backend=os.environ.get("VS_IO_BACKEND", "auto"), config=cfg)
     controller = Controller(io, cfg)
     run_id = f"run_{int(time.time())}"
     ep = EpisodeWriter(cfg["episodes_dir"], run_id)
-    follower_prompt = open("prompts/follower.md").read()
-    leader_prompt = open("prompts/leader.md").read()
+    follower_prompt = open("prompts/follower.md").read() if not reflex_only else ""
+    leader_prompt = open("prompts/leader.md").read() if not disable_leader else ""
     # mutable cell so the leader's brief_update reaches the follower
     shared = {"brief": "Early game: farm gems near open ground, orbit clockwise."}
     stop = threading.Event()
     latencies, start = [], time.monotonic()
 
     try:
+        if not eval_mode: # Manual starts skip launch logic if already in-game? 
+            # Actually GOAL.md says launch.py handles macro.
+            pass
+        
         launch.to_stage_select(io, cfg)          # launch + menu macro
         launch.start_run(io, cfg)
-        fw = threading.Thread(target=follower_loop,
-                              args=(io, controller, cfg, stop,
-                                    follower_prompt, shared), daemon=True)
-        fw.start()
+        
+        if not reflex_only:
+            fw = threading.Thread(target=follower_loop,
+                                args=(io, controller, cfg, stop,
+                                        follower_prompt, shared), daemon=True)
+            fw.start()
 
         tick_s = 1.0 / cfg["tick_hz"]
         while True:
@@ -70,19 +76,23 @@ def run_episode(eval_mode: bool):
 
             if screen_type == "LEVEL_UP":
                 options = perceive.read_options(frame)
-                pick = model_client.call_leader(leader_prompt, frame,
-                                                options, shared["brief"])
-                ep.log_leader(options, pick["pick"], pick["why"],
-                              pick["brief_update"])
-                shared["brief"] = pick["brief_update"]
-                launch.select_option(io, pick["pick"], options)
+                if not disable_leader:
+                    pick = model_client.call_leader(leader_prompt, frame,
+                                                    options, shared["brief"])
+                    ep.log_leader(options, pick["pick"], pick["why"],
+                                pick["brief_update"])
+                    shared["brief"] = pick["brief_update"]
+                    launch.select_option(io, pick["pick"], options)
+                else:
+                    # Default to option 1 if leader disabled
+                    launch.select_option(io, 1, options)
                 continue
 
             if screen_type in ("DEATH", "RUN_END"):
                 break
 
             dets, player = perceive.detect(frame)
-            result = controller.tick(dets, player, screen_type)
+            result = controller.tick(dets, player, screen_type, strafe=reflex_only)
             if result.follower_latency_ms:
                 latencies.append(result.follower_latency_ms)
             st = perceive.hud_state(frame)
@@ -117,4 +127,9 @@ def run_episode(eval_mode: bool):
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--seed-set", default=None)
-    run_episode(eval_mode=ap.parse_args().seed_set == "eval")
+    ap.add_argument("--reflex-only", action="store_true")
+    ap.add_argument("--disable-leader", action="store_true")
+    args = ap.parse_args()
+    run_episode(eval_mode=args.seed_set == "eval",
+                reflex_only=args.reflex_only,
+                disable_leader=args.disable_leader)

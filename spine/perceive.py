@@ -15,6 +15,14 @@ import os
 import re
 import reflex
 
+# Configure Tesseract path if on Windows
+import sys
+if sys.platform == "win32":
+    import pytesseract
+    tesseract_path = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+    if os.path.exists(tesseract_path):
+        pytesseract.pytesseract.tesseract_cmd = tesseract_path
+
 last_level = 0
 last_kills = 0
 
