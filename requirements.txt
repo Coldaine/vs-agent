@@ -1,0 +1,14 @@
+# spine runtime dependencies
+# Model I/O
+openai>=1.30
+# Perception
+ultralytics>=8.2        # YOLOv8 detector (forked weights provisioned separately)
+opencv-python>=4.9
+numpy>=1.26
+pytesseract>=0.3.10     # requires the Tesseract OCR binary on PATH
+# Game I/O — route A (dxcam capture + pydirectinput input)
+dxcam>=0.0.5
+pydirectinput>=1.0.4
+PyGetWindow>=0.0.9
+# Config
+PyYAML>=6.0

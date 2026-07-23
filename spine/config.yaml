@@ -1,0 +1,46 @@
+# spine/config.yaml — controller parameters (Loop C may mutate these)
+tick_hz: 2
+collision_radius_px: 90
+staleness_ms: 800
+dither_ms: 300
+escape_vector_k: 5
+gem_pull_weight: 0.3
+
+# eval conditions (FIXED — never change and compare scores across)
+stage: "Mad Forest"
+character: "Antonio"
+arcanas: false
+
+# perception
+level_up_ocr_trigger: "LEVEL UP"
+death_ocr_triggers: ["YOU DIED", "GAME OVER"]
+run_end_ocr_triggers: ["REAPER", "TIME'S UP"]
+game_process_hint: "VampireSurvivors"
+window_title_hint: "Vampire Survivors"
+steam_app_id: "1794680"
+
+# detector (PROVISIONING — see status/HUMAN_NEEDED.md)
+# yolo_weights: path to forked victorcoelh/vampire-survivors-bot weights
+yolo_weights: null
+yolo_conf: 0.25
+# map each model class NAME to a kind the reflex layer understands
+yolo_class_map:
+  enemy: enemy
+  elite: elite
+  gem: gem
+  player: player
+
+# OCR crop regions [x0, y0, x1, y1] in window pixels (resolution-specific,
+# set once at fixed resolution). null = OCR whole frame / best-effort.
+hud_regions:
+  hp: null
+  level: null
+  timer: null
+  level_up_options: null
+
+# paths
+episodes_dir: "episodes"
+eval_set_dir: "eval_set"
+failures_log: "failures.jsonl"
+theories_log: "theories.jsonl"
+experiments_log: "experiments.log"
