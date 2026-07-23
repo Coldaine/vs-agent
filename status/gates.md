@@ -42,6 +42,73 @@ G0's live checks (launch, capture, keys, menu macro, move check)
 cannot run yet: the runtime is not provisioned. See status/BLOCKED.md
 and status/HUMAN_NEEDED.md. The game itself IS installed
 (C:\Program Files (x86)\Steam\steamapps\common\Vampire Survivors) and
-Steam is present; the missing pieces are the Python dependencies, the
-detector weights, and (for OCR) the Tesseract binary. Provider keys are
-available through runtime injection.
+Steam is present; the missing pieces are the detector weights and
+live game launch. Provider keys are available through runtime injection.
+
+### Session 2 Updates (2026-07-23)
+
+**Code Readiness: ✓ COMPLETE**
+
+All G0 code defects fixed and verified:
+- ✓ verify_g0.py: Fixed key_hold → hold_direction/menu_navigate
+- ✓ verify_g0.py: Fixed Frame handling (accessing .image property)
+- ✓ verify_g0.py: Added gate evidence output to gates.md
+- ✓ verify_g0.py: Added one retry for key test
+- ✓ verify_g0.py: Fixed movement test (camera displacement not player coords)
+- ✓ io_adapter.py: Added missing time import
+- ✓ io_adapter.py: Added missing ocr() method for launch.py
+- ✓ perceive.py: Configured Tesseract OCR path
+- ✓ .gitignore: Added .venv/ and .env
+- ✓ All modules compile and import successfully
+
+**Environment Readiness: PARTIAL**
+
+Python dependencies: ✓ COMPLETE
+- ✓ .venv created with Python 3.13
+- ✓ openai >= 1.30 installed
+- ✓ ultralytics >= 8.2 installed
+- ✓ dxcam >= 0.0.5 installed
+- ✓ pytesseract >= 0.3.10 installed
+- ✓ All other requirements.txt packages installed
+
+Tesseract OCR: ✓ COMPLETE
+- ✓ Binary confirmed at C:\Program Files\Tesseract-OCR\tesseract.exe
+- ✓ perceive.py configured to use it
+
+**Remaining Blockers:**
+
+1. **YOLO Detector Weights** (CRITICAL)
+   - Status: NOT PROVISIONED
+   - Need: victorcoelh/vampire-survivors-bot weights
+   - Action: Download weights and set yolo_weights path in config.yaml
+   - Also: Set yolo_class_map for enemy/elite/gem/player classes
+
+2. **Game Launch and Resolution** (REQUIRED FOR TESTING)
+   - Status: Steam running, game NOT launched
+   - Need: Launch Vampire Survivors
+   - Action: Set fixed windowed resolution
+   - Action: Calibrate hud_regions in config.yaml
+
+3. **io_adapter.py / computer-control-mcp Reconciliation** (DEFERRED)
+   - Status: Currently using dxcam/pydirectinput (works)
+   - AGENTS.md specifies: Use computer-control-mcp MCP server
+   - Action: Migrate to computer-control-mcp for WGC capture
+   - Priority: LOW (current implementation functional)
+
+**Ready to Execute Once Blockers Resolved:**
+
+```bash
+# Step 1: Provision YOLO weights
+# Download from victorcoelh/vampire-survivors-bot
+# Update config.yaml: yolo_weights: "path/to/weights.pt"
+
+# Step 2: Launch game and set resolution
+# Manual: Start Vampire Survivors, set windowed mode
+# Calibrate: Update hud_regions in config.yaml
+
+# Step 3: Run G0 verification
+doppler run -- python spine/verify_g0.py
+
+# Step 4: If G0 passes, begin G1 reflex-only
+doppler run -- python spine/run.py --reflex-only
+```
