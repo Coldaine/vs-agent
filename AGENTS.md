@@ -14,14 +14,14 @@ There are THREE agents in this project. Do not confuse them.
    agents.
 
 2. **The FOLLOWER is an agent you are building.** A fast vision model
-   behind an OpenAI-compatible endpoint (.env FOLLOWER_URL). At runtime
+   behind OpenRouter's free vision router. At runtime
    it sees game frames and proposes movement directions. It is
    prompted by prompts/follower.md. It does not exist as code you
    write — it is a model you configure. You improve it by mutating its
    prompt and by feeding the corpus, never by hardcoding its decisions.
 
-3. **The LEADER is an agent you are building.** A mid-tier model
-   (.env LEADER_URL). At runtime it makes level-up choices and writes
+3. **The LEADER is an agent you are building.** A DeepSeek V4 Flash
+   text/reasoning model. At runtime it makes level-up choices and writes
    strategy briefs. Prompted by prompts/leader.md. Same rule: improve
    via prompt mutation, never by hardcoding picks.
 
@@ -38,8 +38,8 @@ writer of keyboard input. Game I/O goes through the
 | Game I/O | `computer-control-mcp` MCP server (WGC screenshot, key press/hold, OCR) | off the shelf |
 | Reflex perception | forked from victorcoelh/vampire-survivors-bot (YOLOv8 enemy/gem detection) | fork, don't rebuild |
 | Controller | `spine/controller.py` — deterministic arbiter FSM | you write this |
-| Follower | small fast VLM, OpenAI-compatible, `.env FOLLOWER_URL` | configure, don't build |
-| Leader | mid-tier model, `.env LEADER_URL` | configure, don't build |
+| Follower + labeler | OpenRouter `openrouter/free` vision router | configure, don't build |
+| Leader + reviewer | direct DeepSeek `deepseek-v4-flash` | configure, don't build |
 | Glue | tick loop, level-up detector, trace logger, review runner, eval runner | ~300-500 lines target |
 
 ## Commands
@@ -56,10 +56,11 @@ writer of keyboard input. Game I/O goes through the
 
 ## Conventions
 
-- All model endpoints are OpenAI-compatible; URLs and keys from .env
-  only. Never hardcode. Expected .env keys: FOLLOWER_URL,
-  FOLLOWER_KEY, LEADER_URL, LEADER_KEY. Review and Loop P sub-agents
-  use the LEADER endpoint unless .env provides REVIEWER_URL.
+- Model credentials are injected into the process, normally with
+  `doppler run`; do not commit a `.env` file or Doppler scope. Required
+  variables are `OPENROUTER_API_KEY` (follower + labeler vision calls)
+  and `DEEPSEEK_API_KEY` (leader + reviewer text calls). Endpoint URLs
+  and default model IDs are fixed in `spine/model_client.py`.
 - Two ways to involve the human, both via status/:
   status/HUMAN_NEEDED.md = normal checkpoint (gate sign-off, eval-set
   labeling, play session); pause that work and continue anything not

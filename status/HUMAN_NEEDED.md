@@ -5,12 +5,18 @@ the live environment needs five things only you can supply. None of
 these are guesses the BUILDER may safely make (secrets, a fixed
 resolution choice, and a trained model file).
 
-## 1. Model endpoints — create `.env` (copy `.env.example`)
+## 1. Launch with provider keys injected
 
-Fill FOLLOWER_URL/KEY/MODEL and LEADER_URL/KEY/MODEL with your
-OpenAI-compatible endpoints. Optional REVIEWER_* for review/theorist
-/labeler sub-agents (falls back to LEADER if unset). The follower must
-be a vision model; the leader/reviewer must accept images too.
+No `.env` is needed. Start the process through any Doppler project/config
+that injects `DEEPSEEK_API_KEY` and `OPENROUTER_API_KEY`, for example:
+
+```
+doppler run -- python spine/run.py
+```
+
+The repository does not name or pin the Doppler source. DeepSeek is called
+directly for leader/reviewer text roles; OpenRouter `openrouter/free` is used
+for follower/labeler vision roles.
 
 ## 2. Install Python dependencies
 
@@ -47,6 +53,6 @@ needs them.
 
 ## When done
 
-Confirm here in writing, then the BUILDER resumes at G0
-(`python spine/run.py`) and records evidence in status/gates.md.
+Confirm here in writing, then the BUILDER resumes at G0 through Doppler
+and records evidence in status/gates.md.
 Delete status/BLOCKED.md when the environment is up.

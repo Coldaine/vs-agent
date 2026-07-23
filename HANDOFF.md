@@ -26,9 +26,10 @@ design, not a bug):
    tried in route order: (A) NitroGen GamepadEnv, (B)
    computer-control-mcp, (C) thin MCP facade over GamepadEnv. One
    bounded diagnostic cycle per failing route, then move on.
-2. **spine/model_client.py** — model endpoint calls. Wire to .env
-   (FOLLOWER_URL/KEY, LEADER_URL/KEY, optional REVIEWER_URL/KEY),
-   OpenAI-compatible, `openai` SDK. Contracts in docstrings are fixed.
+2. **spine/model_client.py** — model endpoint calls. Credentials arrive
+   through the process environment: direct DeepSeek for text roles and
+   OpenRouter's free vision router for frame roles. Do not tie the repo to
+   a particular Doppler project/config. Contracts in docstrings are fixed.
 3. **spine/perceive.py** — YOLO/OCR wiring. Fork detection from
    victorcoelh/vampire-survivors-bot; elites get weight=3.0.
 
@@ -53,7 +54,8 @@ commit message.
   installed.
 - Vampire Survivors set to WINDOWED mode at a fixed resolution.
   Never change it.
-- .env with the model endpoint URLs and keys.
+- A launcher that injects `DEEPSEEK_API_KEY` and `OPENROUTER_API_KEY`
+  into the process (for example, `doppler run -- python spine/run.py`).
 - computer-control-mcp available as an MCP server (route B).
 
 ## Rules that will feel like friction and are not negotiable

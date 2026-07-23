@@ -7,10 +7,10 @@ Append-only record of gate progress. Evidence-based (GOAL.md).
 BUILDER work completed (code, no live env required):
 
 - **Seam 1 — spine/model_client.py**: FILLED. OpenAI-compatible client
-  (openai SDK), lazy `.env` loader, per-role endpoint resolution
-  (FOLLOWER/LEADER/REVIEWER with REVIEWER→LEADER fallback), base64
-  image encoding, tolerant JSON parsing with one retry for sub-agents,
-  every call logged to model_calls.jsonl (fn, prompt_hash, latency_ms).
+  (openai SDK), process-injected provider credentials only, direct
+  DeepSeek text roles and OpenRouter free vision roles, base64 image
+  encoding, tolerant JSON parsing with one retry for sub-agents, every
+  call logged to model_calls.jsonl (fn, prompt_hash, latency_ms).
   All fixed contracts implemented: call_follower, call_follower_eval,
   call_leader, call_subagent, call_labeler, call_auditor,
   export_gallery_frames.
@@ -32,7 +32,8 @@ BUILDER work completed (code, no live env required):
 - **Config**: added yolo_weights / yolo_class_map / yolo_conf,
   death/run-end OCR triggers, window_title_hint, and hud_regions crop
   boxes to spine/config.yaml.
-- **Scaffolding**: requirements.txt, .gitignore, .env.example.
+- **Scaffolding**: requirements.txt and .gitignore. Provider keys are
+  injected at launch and the repository has no pinned Doppler scope.
 - All spine modules byte-compile; config.yaml parses.
 
 ## G0 PLUMBING — BLOCKED (pending human provisioning)
@@ -41,5 +42,6 @@ G0's live checks (launch, capture, keys, menu macro, move check)
 cannot run yet: the runtime is not provisioned. See status/BLOCKED.md
 and status/HUMAN_NEEDED.md. The game itself IS installed
 (C:\Program Files (x86)\Steam\steamapps\common\Vampire Survivors) and
-Steam is present; the missing pieces are `.env`, the Python
-dependencies, the detector weights, and (for OCR) the Tesseract binary.
+Steam is present; the missing pieces are the Python dependencies, the
+detector weights, and (for OCR) the Tesseract binary. Provider keys are
+available through runtime injection.

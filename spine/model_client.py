@@ -1,13 +1,13 @@
 """model_client.py — the ONLY file that calls model endpoints.
 
-All endpoints are OpenAI-compatible, configured via .env:
-  FOLLOWER_URL / FOLLOWER_KEY  — fast VLM, movement proposals
-  LEADER_URL / LEADER_KEY      — mid-tier, level-ups + strategy
-  REVIEWER_URL / REVIEWER_KEY  — optional; defaults to LEADER
+Credentials are injected into the process (normally with ``doppler run``),
+never read from a project-specific Doppler scope or committed ``.env`` file:
+  DEEPSEEK_API_KEY    — direct DeepSeek V4 Flash text/reasoning calls
+  OPENROUTER_API_KEY  — OpenRouter's free vision router
 
-Every call is logged: prompt hash, response, latency_ms (AGENTS.md).
-The builder implements these against the `openai` python SDK; the
-signatures and contracts below are fixed.
+The follower and frame-labeling calls use OpenRouter's ``openrouter/free``
+model because they require image input. The leader and review calls use the
+direct DeepSeek API because they are text-only roles.
 """
 
 from __future__ import annotations
@@ -25,50 +25,35 @@ LOG = "model_calls.jsonl"
 DIRECTIONS = {"N", "NE", "E", "SE", "S", "SW", "W", "NW", "HOLD"}
 
 # ---------------------------------------------------------------------------
-# .env loading (no hard dependency on python-dotenv; AGENTS.md: keys from .env)
-# ---------------------------------------------------------------------------
-_ENV_LOADED = False
-
-
-def _load_env() -> None:
-    global _ENV_LOADED
-    if _ENV_LOADED:
-        return
-    for path in (".env", os.path.join(os.path.dirname(__file__), "..", ".env")):
-        if os.path.exists(path):
-            with open(path, "r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line or line.startswith("#") or "=" not in line:
-                        continue
-                    k, v = line.split("=", 1)
-                    os.environ.setdefault(
-                        k.strip(), v.strip().strip('"').strip("'"))
-            break
-    _ENV_LOADED = True
-
-
-# ---------------------------------------------------------------------------
 # endpoint / client resolution
 # ---------------------------------------------------------------------------
 _CLIENTS: dict[str, object] = {}
 
+_DIRECT_DEEPSEEK = {
+    "url": "https://api.deepseek.com",
+    "key_name": "DEEPSEEK_API_KEY",
+    "model": "deepseek-v4-flash",
+}
+_FREE_OPENROUTER_VISION = {
+    "url": "https://openrouter.ai/api/v1",
+    "key_name": "OPENROUTER_API_KEY",
+    "model": "openrouter/free",
+}
+
 
 def _endpoint(role: str) -> tuple[str, str, str]:
-    """Return (base_url, api_key, model) for a role, honouring the
-    REVIEWER->LEADER fallback. Raises if a required endpoint is unset."""
-    _load_env()
+    """Return the fixed provider endpoint and injected credential for a role."""
     role = role.upper()
-    if role == "REVIEWER" and not os.environ.get("REVIEWER_URL"):
-        role = "LEADER"
-    url = os.environ.get(f"{role}_URL")
-    key = os.environ.get(f"{role}_KEY", "not-needed")
-    model = os.environ.get(f"{role}_MODEL", "default")
-    if not url:
+    provider = (_FREE_OPENROUTER_VISION
+                if role in {"FOLLOWER", "LABELER"}
+                else _DIRECT_DEEPSEEK)
+    key = os.environ.get(provider["key_name"])
+    if not key:
         raise RuntimeError(
-            f"{role}_URL is not set in .env — cannot call the {role.lower()} "
-            "endpoint. See status/HUMAN_NEEDED.md for provisioning.")
-    return url, key, model
+            f"{provider['key_name']} is not injected — launch via Doppler with "
+            "the provider key available in the child process.")
+    model = os.environ.get(f"{role}_MODEL", provider["model"])
+    return provider["url"], key, model
 
 
 def _client(role: str):
@@ -130,14 +115,19 @@ def _parse_json(text: str) -> dict:
 
 
 def _chat(role: str, messages: list, fn: str, prompt_hash: str,
-          max_tokens: int = 512, temperature: float = 0.0) -> str:
+           max_tokens: int = 512, temperature: float = 0.0) -> str:
     client, model = _client(role)
     t0 = time.monotonic()
     ok = False
     try:
-        resp = client.chat.completions.create(
-            model=model, messages=messages,
-            max_tokens=max_tokens, temperature=temperature)
+        request = {"model": model, "messages": messages, "max_tokens": max_tokens}
+        if role.upper() in {"LEADER", "REVIEWER"}:
+            request["reasoning_effort"] = os.environ.get(
+                "DEEPSEEK_REASONING_EFFORT", "max")
+            request["extra_body"] = {"thinking": {"type": "enabled"}}
+        else:
+            request["temperature"] = temperature
+        resp = client.chat.completions.create(**request)
         content = resp.choices[0].message.content or ""
         ok = True
         return content
@@ -195,9 +185,9 @@ def call_leader(prompt_text: str, frame, options: list[str], brief: str) -> dict
     user = (f"Current strategy brief:\n{brief}\n\n"
             f"Level-up options (top to bottom): {json.dumps(options)}\n"
             "Reply in JSON only as specified.")
-    messages = [{"role": "user", "content": [
-        {"type": "text", "text": prompt_text + "\n\n" + user},
-        _image_content(frame)]}]
+    # DeepSeek V4 Flash is deliberately used as a text-only strategic model.
+    # OCR has already supplied the level-up options, so a frame is unnecessary.
+    messages = [{"role": "user", "content": prompt_text + "\n\n" + user}]
     content = _chat("LEADER", messages, "call_leader",
                     _hash(prompt_text + user), max_tokens=400)
     out = _parse_json(content)
@@ -210,13 +200,9 @@ def call_subagent(prompt_text: str, packet: dict, keyframes=None) -> dict:
     """Fresh-context sub-agent call. Returns parsed JSON. Must retry
     once with 'return valid JSON only' if parsing fails, then raise."""
     payload = prompt_text + "\n\nPACKET:\n" + json.dumps(packet, default=str)
-    content_parts = [{"type": "text", "text": payload}]
-    for kf in (keyframes or [])[:12]:
-        try:
-            content_parts.append(_image_content(kf))
-        except Exception:
-            pass
-    messages = [{"role": "user", "content": content_parts}]
+    # Reviewers use direct DeepSeek text reasoning. Frame observations are
+    # captured in the packet rather than sending unsupported image content.
+    messages = [{"role": "user", "content": payload}]
     phash = _hash(payload)
     content = _chat("REVIEWER", messages, "call_subagent", phash,
                     max_tokens=1500)
@@ -234,7 +220,7 @@ def call_labeler(frame_path: str, rubric_pointer: str) -> dict:
     messages = [{"role": "user", "content": [
         {"type": "text", "text": rubric_pointer},
         _image_content(frame_path)]}]
-    content = _chat("REVIEWER", messages, "call_labeler",
+    content = _chat("LABELER", messages, "call_labeler",
                     _hash(rubric_pointer + frame_path), max_tokens=400)
     return _parse_json(content)
 
@@ -246,7 +232,7 @@ def call_auditor(frame_path: str, rubric_pointer: str, primary: dict) -> dict:
     messages = [{"role": "user", "content": [
         {"type": "text", "text": user},
         _image_content(frame_path)]}]
-    content = _chat("REVIEWER", messages, "call_auditor",
+    content = _chat("LABELER", messages, "call_auditor",
                     _hash(user), max_tokens=400)
     out = _parse_json(content)
     out.setdefault("agrees", True)

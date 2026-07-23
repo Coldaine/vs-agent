@@ -10,24 +10,24 @@ everything downstream need a live environment that is not yet set up.
 - Python 3.13 + uv present.
 - Steam installed; Vampire Survivors installed at
   `C:\Program Files (x86)\Steam\steamapps\common\Vampire Survivors`.
-- **Missing:** no `.env`; none of the runtime Python deps installed
+- **Available:** `DEEPSEEK_API_KEY` and `OPENROUTER_API_KEY` can be
+  injected by any Doppler source selected by the launcher; no `.env` is
+  required or used.
+- **Missing:** none of the runtime Python deps installed
   (openai, ultralytics/torch, dxcam, pydirectinput, pygetwindow,
-  opencv-python, numpy, pytesseract); no `computer-control-mcp`; no
-  detector weights; Tesseract OCR binary not confirmed.
+  opencv-python, numpy, pytesseract); no detector weights; Tesseract OCR
+  binary not confirmed. `uvx computer-control-mcp@latest` is available.
 
 ## What is needed to unblock (details in status/HUMAN_NEEDED.md)
 
-1. `.env` — FOLLOWER/LEADER (and optional REVIEWER) OpenAI-compatible
-   URLs + keys + model names. Secrets: the human must create this; the
-   BUILDER must not fabricate credentials.
-2. `pip install -r requirements.txt` (or `uv pip install ...`).
-3. Tesseract OCR binary on PATH (for pytesseract HUD/menu reads).
-4. Forked detector weights from victorcoelh/vampire-survivors-bot,
+1. `pip install -r requirements.txt` (or `uv pip install ...`).
+2. Tesseract OCR binary on PATH (for pytesseract HUD/menu reads).
+3. Forked detector weights from victorcoelh/vampire-survivors-bot,
    with `yolo_weights` + `yolo_class_map` set in spine/config.yaml.
-5. Windowed mode at a FIXED resolution set once (never changed); then
+4. Windowed mode at a FIXED resolution set once (never changed); then
    the `hud_regions` crop boxes in config.yaml calibrated to it.
 
-Once 1–4 are in place, resume with G0:
-`python spine/run.py` (or a G0 smoke sequence) verifies launch →
+Once 1–4 are in place, resume with G0 through a secret-injecting
+launcher, for example `doppler run -- python spine/run.py`. It verifies launch →
 capture → keys → menu macro → move check, logging evidence to
 status/gates.md.

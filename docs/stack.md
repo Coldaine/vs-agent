@@ -27,16 +27,20 @@
    detection weights/approach for the reflex layer's threat-by-octant
    computation. (LonesomeSoul/Vampire_survivors_bot_CV is a CV-based
    alternative reference.)
-3. **Follower/leader endpoints** — any OpenAI-compatible servers
-   (local vLLM/Ollama/llama.cpp or hosted). Configured via .env.
+3. **Model endpoints** — OpenRouter's `openrouter/free` router provides
+   the follower and labeler with free image-capable models; direct
+   DeepSeek V4 Flash provides text-only leader/reviewer reasoning. Keys
+   are injected into the process, normally through Doppler; this repo
+   does not pin a Doppler project or config.
 
 ## Model selection (as of July 2026 — re-verify before G2)
 
 - BUILDER: whatever the ChatGPT-OAuth Codex subscription serves.
-- LEADER + review/theorist sub-agents: GPT-5.6 Luna (fast/cheap tier).
-  Upgrade path if build audits grade poorly: Terra.
-- FOLLOWER hosted fallback: GPT-5.4 Nano or Gemini 3.5 Flash-Lite
-  (minimal thinking setting — the follower answers with one token).
+- LEADER + review/theorist sub-agents: direct `deepseek-v4-flash`, with
+  DeepSeek thinking effort set to `max` by default.
+- FOLLOWER + labeler: `openrouter/free`, which selects a currently-free
+  model compatible with image input. Free availability is transient, so
+  benchmark a paid replacement before relying on it for evals.
 - FOLLOWER local (RTX 5090, 32GB — preferred end state before
   distillation): trial in this order via vLLM's OpenAI server:
   Qwen3-VL-4B, Qwen3-VL-8B, Gemma 4 12B, InternVL3.5-8B

@@ -13,6 +13,3 @@ failures.jsonl
 theories.jsonl
 loop_p_results.jsonl
 experiments.log
-
-# --- secrets ---
-.env
