@@ -1,7 +1,7 @@
 from vs_harness.config import load_config
 from vs_harness.host.launch import LaunchResult, env_endpoint_summary, launch_or_attach
 from vs_harness.planner.menu import extract_levelup_options, handle_paused_ui
-from vs_harness.planner.strategy import StrategyLeader
+from vs_harness.planner.strategy import StrategyPlanner
 from vs_harness.loop.harness import run_episode
 from vs_harness.trace.writer import read_trace
 from vs_harness.types import ScreenMode
@@ -52,7 +52,7 @@ def test_endpoint_summary():
 
 def test_paused_menu_handler():
     cfg = load_config("configs/default.yaml")
-    planner = StrategyLeader(cfg)
+    planner = StrategyPlanner(cfg)
     injector = InputInjector(live=False)
     decision = handle_paused_ui(ScreenMode.LEVELUP, None, planner, injector, now_s=1.0)
     assert "choice_index" in decision

@@ -10,7 +10,7 @@ from vs_harness.control.commit_breakout import build_wrapper
 from vs_harness.control.input_injector import InputInjector
 from vs_harness.control.kill_switch import KillSwitch
 from vs_harness.planner.menu import handle_paused_ui
-from vs_harness.planner.strategy import StrategyLeader
+from vs_harness.planner.strategy import StrategyPlanner
 from vs_harness.mode.detector import ModeDetector
 from vs_harness.movers.registry import build_mover
 from vs_harness.perception.factory import build_perception
@@ -64,7 +64,7 @@ def run_episode(
     mover = build_mover(cfg, approach_id=approach_id)
     approach = mover.approach_id
     wrapper = build_wrapper(cfg, approach_id=approach, enabled=wrapper_enabled)
-    planner = StrategyLeader(cfg)
+    planner = StrategyPlanner(cfg)
     detector = ModeDetector()
 
     injector = InputInjector(live=(mode == "live"))

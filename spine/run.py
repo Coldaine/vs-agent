@@ -4,9 +4,9 @@ Usage:
   python spine/run.py                  # one episode
   python spine/run.py --seed-set eval  # eval episode (fixed conditions)
 
-Structure: perception (YOLO+OCR, builder's seam) -> follower proposal
+Structure: perception (YOLO+OCR, builder's seam) -> pilot proposal
 (async, OpenAI-compatible endpoint) -> controller (deterministic) ->
-trace. Level-up screens hand off to the leader. Every exit path
+trace. Level-up screens hand off to the planner. Every exit path
 neutralizes the controller — no runaway held inputs overnight.
 """
 
@@ -23,21 +23,21 @@ import perceive              # builder: YOLO detections + OCR state
 
 
 def follower_loop(io, controller, cfg, stop, prompt_text, shared):
-    """Async follower: proposes directions without blocking the tick.
-    Reads shared['brief'] EVERY iteration so leader brief_updates
+    """Async pilot: proposes directions without blocking the tick.
+    Reads shared['brief'] EVERY iteration so planner brief_updates
     propagate — passing brief by value here was bug #1 found in audit."""
     while not stop.is_set():
         try:
             frame = io.screenshot()
             state = perceive.state_summary(frame)
             t0 = time.monotonic()
-            direction = model_client.call_follower(
+            direction, _speed = model_client.call_pilot(
                 prompt_text, state, frame, shared["brief"])
             latency = (time.monotonic() - t0) * 1000
             if not controller.submit_follower_proposal(direction, latency):
                 perceive.log_protocol_violation(direction)
         except Exception as e:
-            print(f"[follower] {e}", file=sys.stderr)
+            print(f"[pilot] {e}", file=sys.stderr)
             time.sleep(0.1)
 
 
@@ -58,9 +58,9 @@ def run_episode(eval_mode: bool, reflex_only: bool = False, disable_leader: bool
     controller = Controller(io, cfg)
     run_id = f"run_{int(time.time())}"
     ep = EpisodeWriter(cfg["episodes_dir"], run_id)
-    follower_prompt = open("prompts/follower.md").read() if not reflex_only else ""
-    leader_prompt = open("prompts/leader.md").read() if not disable_leader else ""
-    # mutable cell so the leader's brief_update reaches the follower
+    pilot_prompt = open("prompts/pilot.md").read() if not reflex_only else ""
+    planner_prompt = open("prompts/planner.md").read() if not disable_leader else ""
+    # Mutable cell so the planner's brief update reaches the pilot.
     shared = {"brief": "Early game: farm gems near open ground, orbit clockwise."}
     stop = threading.Event()
     latencies, start = [], time.monotonic()
@@ -72,7 +72,7 @@ def run_episode(eval_mode: bool, reflex_only: bool = False, disable_leader: bool
         if not reflex_only:
             fw = threading.Thread(target=follower_loop,
                                 args=(io, controller, cfg, stop,
-                                        follower_prompt, shared), daemon=True)
+                                        pilot_prompt, shared), daemon=True)
             fw.start()
 
         tick_s = 1.0 / cfg["tick_hz"]
@@ -84,9 +84,9 @@ def run_episode(eval_mode: bool, reflex_only: bool = False, disable_leader: bool
             if screen_type == "LEVEL_UP":
                 options = perceive.read_options(frame)
                 if not disable_leader:
-                    pick = model_client.call_leader(leader_prompt, frame,
+                    pick = model_client.call_planner(planner_prompt, frame,
                                                     options, shared["brief"])
-                    ep.log_leader(options, pick["pick"], pick["why"],
+                    ep.log_planner(options, pick["pick"], pick["why"],
                                 pick["brief_update"])
                     shared["brief"] = pick["brief_update"]
                     launch.select_option(io, pick["pick"], options)
@@ -126,8 +126,8 @@ def run_episode(eval_mode: bool, reflex_only: bool = False, disable_leader: bool
         ep.close(survived_s=round(survived, 1),
                  level=perceive.last_level, kills=perceive.last_kills,
                  invalid=invalid,
-                 prompt_hashes={"follower": hash_prompt("prompts/follower.md"),
-                                "leader": hash_prompt("prompts/leader.md")})
+                  prompt_hashes={"pilot": hash_prompt("prompts/pilot.md"),
+                                 "planner": hash_prompt("prompts/planner.md")})
         print(json.dumps({"run_id": run_id, "survived_s": survived,
                           "invalid": invalid, "p95_ms": p95}))
 
@@ -136,7 +136,8 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--seed-set", default=None)
     ap.add_argument("--reflex-only", action="store_true")
-    ap.add_argument("--disable-leader", action="store_true")
+    ap.add_argument("--disable-planner", "--disable-leader",
+                    dest="disable_leader", action="store_true")
     args = ap.parse_args()
     run_episode(eval_mode=args.seed_set == "eval",
                 reflex_only=args.reflex_only,
