@@ -1,0 +1,7 @@
+inherits: configs/default.yaml
+
+perception:
+  backend: sam3
+  sam3_url: "http://127.0.0.1:8090"
+  sam_score_thresh: 0.5
+  sam3_timeout_s: 90.0

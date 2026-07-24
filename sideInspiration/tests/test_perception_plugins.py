@@ -40,3 +40,55 @@ def test_vision_candidates_registry():
     assert any(c["id"] == "yolo_world" for c in perc)
     movers = summarize("fast_mover")
     assert any("smolvlm" in c["id"] for c in movers)
+
+
+def test_sam3_http_client_parses_masks(monkeypatch):
+    """Unit-test the HTTP client without a live GPU container."""
+    import base64
+
+    import cv2
+
+    from vs_harness.perception.sam3 import Sam3HttpPerception
+
+    frame = np.zeros((40, 60, 3), dtype=np.uint8)
+    threat = np.zeros((40, 60), dtype=np.uint8)
+    threat[10:20, 15:25] = 255
+    ok, buf = cv2.imencode(".png", threat)
+    assert ok
+    png_b64 = base64.b64encode(buf.tobytes()).decode("ascii")
+
+    class _Resp:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "width": 60,
+                "height": 40,
+                "union_png_b64": png_b64,
+                "per_prompt_png_b64": {"enemy": png_b64, "monster": png_b64},
+                "prompt_counts": {"enemy": 1, "monster": 1},
+                "checkpoint_hint": "facebook/sam3",
+                "inference_ms": 1.0,
+            }
+
+    class _Client:
+        def post(self, url, json=None):  # noqa: A002
+            assert url.endswith("/v1/segment")
+            assert "enemy" in json["prompts"]
+            return _Resp()
+
+        def close(self):
+            return None
+
+    perc = Sam3HttpPerception(
+        base_url="http://test",
+        enemy_prompts=["enemy", "monster"],
+        gem_prompts=[],
+        player_prompts=[],
+    )
+    monkeypatch.setattr(perc, "_client", _Client())
+    out = perc.infer(frame, 0.0)
+    assert out.threat_union[12, 18]
+    assert out.meta["transport"] == "http"
+    assert out.backend == "sam3"

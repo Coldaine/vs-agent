@@ -10,7 +10,8 @@ candidates:
     package: facebookresearch/sam3
     notes: >
       Promptable concept masks; union threat field (no track IDs). Best quality free-space carve.
-      Image PCS ~30ms @100+ objs on H200-class; video multiplex helps tracking but we discard IDs.
+      Run via sideInspiration/sam3_service Docker (image PCS, facebook sam3 checkpoint).
+      SAM 3.1 multiplex is the video tracker, not the default for per-frame threat unions.
     latency_tier: mid   # tens of ms
     harness_backend: sam3
     priority: 1
@@ -91,7 +92,7 @@ candidates:
     kind: local_vlm
     notes: >
       Cited in slow-fast game-agent work as a reactive VLM. Candidate for high-Hz heading/bias
-      while a larger leader plans builds.
+      while a larger planner plans builds.
     latency_tier: mid
     harness_mover: fast_vlm
     openai_model_hint: minicpm-o
@@ -106,7 +107,7 @@ candidates:
     openai_model_hint: gpt-4o-mini
     priority: 3
 
-  # --- Slow leader ---
+  # --- Slow planner ---
   - id: qwen25_vl_7b_or_larger
     role: slow_leader
     kind: local_or_remote_vlm
@@ -118,7 +119,7 @@ candidates:
   - id: gpt4o_leader
     role: slow_leader
     kind: remote_vlm
-    notes: Default remote leader in configs/default.yaml.
+    notes: Default remote planner in configs/default.yaml.
     latency_tier: slow
     openai_model_hint: gpt-4o
     priority: 1
@@ -141,4 +142,5 @@ design_guidance:
   - Prefer classical/open-vocab masks for movement; VLMs for bias + paused strategy.
   - Literature shows tiny specialized controllers beat huge VLMs on real-time games when latency matters.
   - Slow-fast pairing helps only when the slow model already beats fast-only on the task.
-  - Distill good runs into a tiny heading CNN/MLP later; keep VLMs for bootstrap and leader.
+  - Distill good runs into a tiny heading CNN/MLP later; keep VLMs for bootstrap and planner.
+

@@ -1,0 +1,36 @@
+# GPU SAM 3 image-PCS sidecar for sideInspiration / future spine adopt.
+#
+# Prerequisites:
+#   - Docker Desktop with NVIDIA runtime
+#   - Hugging Face access accepted for https://huggingface.co/facebook/sam3
+#   - Token via Doppler (ai-automation/dev: HUGGINGFACE_TOKEN) — use run_sam3.ps1
+#
+# Usage:
+#   .\run_sam3.ps1
+#   curl http://127.0.0.1:8090/health
+
+services:
+  sam3:
+    build: .
+    image: vs-sam3-pcs:local
+    ports:
+      - "8090:8090"
+    environment:
+      # run_sam3.ps1 maps Doppler HUGGINGFACE_TOKEN → HF_TOKEN for the compose process
+      HF_TOKEN: ${HF_TOKEN:-}
+      HUGGING_FACE_HUB_TOKEN: ${HF_TOKEN:-}
+      HUGGINGFACE_TOKEN: ${HF_TOKEN:-}
+      HF_HOME: /models/huggingface
+    volumes:
+      - sam3-hf-cache:/models/huggingface
+    gpus: all
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 10
+      start_period: 120s
+
+volumes:
+  sam3-hf-cache:

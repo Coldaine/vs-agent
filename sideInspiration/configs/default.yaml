@@ -13,7 +13,7 @@ host:
   launch_wait_s: 8.0
 
 openai:
-  # OpenAI-compatible endpoint for leader (+ optional fast_vlm mover)
+  # OpenAI-compatible endpoint for planner (+ optional fast_vlm mover)
   base_url: "${VS_OPENAI_BASE_URL:-https://api.openai.com/v1}"
   api_key_env: "VS_OPENAI_API_KEY"
   leader_model: "${VS_LEADER_MODEL:-gpt-4o}"
@@ -24,8 +24,11 @@ openai:
 
 perception:
   # mock | color_heuristic | optical_flow | sam3 | yolo_world | fusion_yolo_flow | fusion_sam_flow
+  # sam3 = Docker sidecar (sideInspiration/sam3_service). Image PCS, not video multiplex.
   backend: mock
-  sam_version: "sam3.1"
+  sam3_url: "http://127.0.0.1:8090"
+  sam_score_thresh: 0.5
+  sam3_timeout_s: 60.0
   enemy_prompts: ["enemy", "monster", "bat", "skeleton"]
   gem_prompts: ["gem", "experience gem"]
   player_prompts: ["player character"]
@@ -52,7 +55,7 @@ wrapper:
   stuck_motion_px: 2.0
   stuck_frames: 8
 
-leader:
+planner:
   enabled: true
   intent_refresh_s: 15.0
   knowledge_pack: "configs/evolution_knowledge.yaml"
@@ -70,3 +73,4 @@ loop:
   auto_launch: true
   sim_seconds: 45.0
   sim_seed: 7
+
