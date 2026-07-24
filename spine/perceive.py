@@ -126,8 +126,7 @@ def _read_int(frame, region) -> int | None:
 
 def hud_state(frame) -> dict:
     """{"hp": int, "level": int, "timer": "MM:SS", "inventory": [...]}"""
-    global last_level
-    regions = _cfg().get("hud_regions", {})
+        regions = _cfg().get("hud_regions", {})
     hp = _read_int(frame, regions.get("hp"))
     level = _read_int(frame, regions.get("level"))
     timer_txt = _ocr(frame, regions.get("timer")) if regions.get("timer") else ""
