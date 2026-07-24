@@ -134,6 +134,7 @@ class IOAdapter:
         self._gamepad_create_retries = int(config.get("gamepad_create_retries", 3))
         self._gamepad_recreate_on_error = bool(config.get("gamepad_recreate_on_error", True))
         self._gamepad_recoveries = 0
+        self._recovering_gamepad = False
 
         import pydirectinput
         pydirectinput.PAUSE = 0  # no artificial delay between key events
@@ -193,10 +194,18 @@ class IOAdapter:
         gc.collect()
 
     def _recover_gamepad(self, error: Exception) -> None:
-        self._destroy_gamepad()
-        self._create_gamepad()
-        self._gamepad_recoveries += 1
-        print(f"[gamepad] recreated after input failure: {error}")
+        if self._recovering_gamepad:
+            raise GamepadUnavailableError(
+                f"gamepad recovery failed while probing an existing recovery: {error}"
+            ) from error
+        self._recovering_gamepad = True
+        try:
+            self._destroy_gamepad()
+            self._create_gamepad()
+            self._gamepad_recoveries += 1
+            print(f"[gamepad] recreated after input failure: {error}")
+        finally:
+            self._recovering_gamepad = False
 
     def _with_gamepad(self, action) -> None:
         if self._gamepad is None:
@@ -354,11 +363,6 @@ class IOAdapter:
                 if attempt < self._capture_retries:
                     time.sleep(0.15)
 
-        if self._last_img is not None:
-            height, width = self._last_img.shape[:2]
-            print(f"[capture] retry exhaustion ({last_error}); using last good frame")
-            return Frame(image=self._last_img, width=width, height=height,
-                         t_capture=time.monotonic())
         raise BlackFrameError(last_error)
 
     # --- input ---
@@ -406,6 +410,7 @@ class IOAdapter:
                 "left": self._vg.XUSB_BUTTON.XUSB_GAMEPAD_DPAD_LEFT,
                 "right": self._vg.XUSB_BUTTON.XUSB_GAMEPAD_DPAD_RIGHT,
                 "confirm": self._vg.XUSB_BUTTON.XUSB_GAMEPAD_A,
+                "start": self._vg.XUSB_BUTTON.XUSB_GAMEPAD_START,
                 "esc": self._vg.XUSB_BUTTON.XUSB_GAMEPAD_B,
             }
             button = buttons.get(key)
@@ -423,10 +428,14 @@ class IOAdapter:
         self._keys.click(x, y)
 
     def click_frame(self, x: int, y: int) -> None:
-        """Click WGC frame coordinates using the physical monitor origin."""
+        """Click frame coordinates relative to the captured game window."""
         import ctypes
 
-        origin_x, origin_y = self.config.get("wgc_monitor_origin", [0, 0])
+        window = self._game_window()
+        if window is not None:
+            origin_x, origin_y = window.left, window.top
+        else:
+            origin_x, origin_y = self.config.get("wgc_monitor_origin", [0, 0])
         user32 = ctypes.windll.user32
         user32.SetCursorPos(int(origin_x + x), int(origin_y + y))
         user32.mouse_event(0x0002, 0, 0, 0, 0)

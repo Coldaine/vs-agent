@@ -13,6 +13,7 @@ Note on versions:
 from __future__ import annotations
 
 import base64
+import binascii
 import logging
 import os
 import threading
@@ -31,6 +32,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 app = FastAPI(title="sam3-image-pcs", version="0.1.0")
 
 _lock = threading.Lock()
+_inference_lock = threading.Lock()
 _processor = None
 _model = None
 _load_error: str | None = None
@@ -40,7 +42,7 @@ class SegmentRequest(BaseModel):
     image_b64: str = Field(..., description="JPEG/PNG bytes, base64-encoded")
     prompts: list[str] = Field(..., min_length=1)
     score_thresh: float = 0.5
-    downsample_max_side: int = 640
+    downsample_max_side: int = Field(640, gt=0)
 
 
 class SegmentResponse(BaseModel):
@@ -55,7 +57,10 @@ class SegmentResponse(BaseModel):
 
 
 def _decode_image(image_b64: str) -> np.ndarray:
-    raw = base64.b64decode(image_b64)
+    try:
+        raw = base64.b64decode(image_b64, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="Invalid image_b64") from exc
     arr = np.frombuffer(raw, dtype=np.uint8)
     bgr = cv2.imdecode(arr, cv2.IMREAD_COLOR)
     if bgr is None:
@@ -136,9 +141,10 @@ def _segment_prompts(
             if masks is None:
                 counts[prompt] = 0
             else:
-                arr = np.asarray(masks)
-                if hasattr(arr, "detach"):
-                    arr = arr.detach().cpu().numpy()
+                if hasattr(masks, "detach"):
+                    arr = masks.detach().cpu().numpy()
+                else:
+                    arr = np.asarray(masks)
                 if arr.ndim == 4:
                     arr = arr[:, 0]
                 if arr.ndim == 3:
@@ -163,6 +169,7 @@ def health() -> dict[str, Any]:
 
     return {
         "ok": True,
+        "ready": _processor is not None and _load_error is None,
         "cuda": bool(torch.cuda.is_available()),
         "device_count": int(torch.cuda.device_count()) if torch.cuda.is_available() else 0,
         "model_loaded": _processor is not None,
@@ -181,9 +188,10 @@ def segment(req: SegmentRequest) -> SegmentResponse:
     rgb = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
     pil = Image.fromarray(rgb)
 
-    union_small, per_small, counts = _segment_prompts(
-        processor, pil, req.prompts, req.score_thresh
-    )
+    with _inference_lock:
+        union_small, per_small, counts = _segment_prompts(
+            processor, pil, req.prompts, req.score_thresh
+        )
 
     def up(m: np.ndarray) -> np.ndarray:
         if m.shape == (oh, ow):

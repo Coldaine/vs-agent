@@ -124,7 +124,7 @@ class Sam3HttpPerception(PerceptionBackend):
 
 
 def try_build_sam(cfg: dict[str, Any]) -> PerceptionBackend | None:
-    """Build Docker-backed SAM 3 client. Returns None if the sidecar is down."""
+    """Build Docker-backed SAM 3 client only after readiness is proven."""
     perc = cfg.get("perception", {})
     base_url = str(perc.get("sam3_url", "http://127.0.0.1:8090")).rstrip("/")
     try:
@@ -132,7 +132,13 @@ def try_build_sam(cfg: dict[str, Any]) -> PerceptionBackend | None:
             r = c.get(f"{base_url}/health")
             r.raise_for_status()
             body = r.json()
-            if body.get("ok") is False:
+            if body.get("load_error"):
+                return None
+            if not body.get("ready", body.get("model_loaded", False)):
+                warmup = c.post(f"{base_url}/v1/warmup")
+                warmup.raise_for_status()
+                body = c.get(f"{base_url}/health").json()
+            if not body.get("model_loaded") or body.get("load_error"):
                 return None
     except Exception as exc:  # noqa: BLE001
         logger.warning("sam3 sidecar unavailable at %s: %s", base_url, exc)
