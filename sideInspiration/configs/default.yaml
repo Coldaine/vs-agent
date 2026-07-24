@@ -29,6 +29,7 @@ perception:
   sam3_url: "http://127.0.0.1:8090"
   sam_score_thresh: 0.5
   sam3_timeout_s: 60.0
+  sam3_warmup_timeout_s: 900.0
   enemy_prompts: ["enemy", "monster", "bat", "skeleton"]
   gem_prompts: ["gem", "experience gem"]
   player_prompts: ["player character"]

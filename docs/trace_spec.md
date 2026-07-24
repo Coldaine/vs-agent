@@ -2,7 +2,7 @@
 
 Every episode writes exactly this structure. Append-only, immutable.
 
-```
+```text
 episodes/run_<n>/
   frames/            2fps JPEG capture, zero-padded: 000001.jpg
   states.jsonl       one line per tick:

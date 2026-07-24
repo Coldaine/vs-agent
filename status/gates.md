@@ -118,7 +118,8 @@ doppler run -- python spine/run.py --reflex-only
 - **Virtual gamepad lifecycle hardened**: `spine/io_adapter.py` now verifies ViGEm/XInput enumeration by polling XInput slots instead of relying on a fixed sleep, recreates the virtual Xbox 360 controller on bounded input failures, and closes it explicitly from `run.py`, `verify_g0.py`, and the new `spine/verify_gamepad.py` diagnostic.
 - **Config**: replaced `gamepad_ready_delay_s` with `gamepad_ready_timeout_s`, `gamepad_create_retries`, and `gamepad_recreate_on_error`.
 - **Validation**: `python -m compileall spine` passed; `python spine/verify_gamepad.py` returned `{"ok": true, "before": [], "during": [0], "recoveries": 0}`.
-- **Live menu blocker unchanged**: `status/BLOCKED.md` still requires review before further menu input.
+- **Historical note**: the earlier live menu blocker was recorded before the verified nav-agent path;
+  current blocker state must be read from `status/BLOCKED.md` and the latest G0 result below.
 
 ## G0 Plumbing Gate — 2026-07-23 23:28:03
 **Verdict:** FAILED

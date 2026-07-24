@@ -16,12 +16,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
+RUN useradd --create-home --uid 10001 appuser \
+ && mkdir -p /models/huggingface \
+ && chown -R appuser:appuser /app /models
+
 # sam3 needs a recent pip / setuptools; install server deps first for layer cache
 COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt \
- && pip install --no-cache-dir "git+https://github.com/facebookresearch/sam3.git"
+ && pip install --no-cache-dir "git+https://github.com/facebookresearch/sam3.git@46957e47805eaa273f4aa7bbbd25a88bca9108ce"
 
 COPY server.py /app/server.py
+RUN chown appuser:appuser /app/server.py
+
+USER appuser
 
 EXPOSE 8090
 VOLUME ["/models"]

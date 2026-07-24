@@ -81,14 +81,8 @@ def _block(io, message: str) -> None:
 
 def _press_and_expect(io, key: str, expected: set[str], timeout_s: float = 12.0):
     """Focus, send exactly one key, then prove the expected next state."""
-    last_error = None
-    for _ in range(2):
-        io.menu_navigate(key)
-        try:
-            return _wait_for_state(io, expected, timeout_s / 2)
-        except RuntimeError as error:
-            last_error = error
-    raise last_error
+    io.menu_navigate(key)
+    return _wait_for_state(io, expected, timeout_s)
 
 
 def ensure_main_menu(io, cfg: dict) -> tuple[str, str]:
