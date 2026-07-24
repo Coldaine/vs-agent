@@ -66,5 +66,4 @@ collision_radius_px: 90
 staleness_ms: 800
 dither_ms: 300
 escape_vector_k: 5        # nearest-k enemies in reflex vector sum
-gem_pull_weight: 0.3      # reflex-layer bias toward gem octants
 ```
