@@ -15,8 +15,8 @@ doppler run -- python spine/run.py
 ```
 
 The repository does not name or pin the Doppler source. DeepSeek is called
-directly for leader/reviewer text roles; OpenRouter `openrouter/free` is used
-for follower/labeler vision roles.
+directly for planner/reviewer text roles; OpenRouter `openrouter/free` is used
+for pilot/labeler vision roles.
 
 ## 2. Install Python dependencies
 
@@ -35,20 +35,25 @@ option text). Install it, then confirm `tesseract --version` works.
 
 ## 4. Detector weights (the reflex layer's eyes)
 
-Fork the YOLOv8 weights from victorcoelh/vampire-survivors-bot (or the
-CV alternative). Put the weights file somewhere stable and set in
-`spine/config.yaml`:
+WARNING: The Vampire Survivors PC engine migrated to Unity on Aug 17, 2023. Old models trained on the Phaser web engine WILL SUFFER SEVERE FALSE-NEGATIVES on the current game due to complete rendering and scaling shifts.
+The previously targeted repo `victorcoelh/vampire-survivors-bot` DOES NOT EXIST (returns 404).
 
-- `yolo_weights: <path to .pt weights>`
-- `yolo_class_map:` — map each of the model's class NAMES to one of
-  `enemy | elite | gem | player`. Elites are weighted x3 automatically.
+YOU MUST:
+- Retrain or validate YOLO weights on the current Unity client.
+- Put the weights file somewhere stable and set in `spine/config.yaml`:
+  - `yolo_weights: <path to .pt weights>`
+  - `yolo_class_map:` — map each of the model's class NAMES to one of `enemy | elite | gem | player`. Elites are weighted x3 automatically.
 
-## 5. Fix the resolution + calibrate HUD crops (once, then never change)
+## 5. Steam Input Interference (Required if going with Gamepad)
+
+- Disable Steam Input for the game (Steam -> Vampire Survivors properties -> Controller -> Disable Steam Input). This is required to prevent Steam from interfering with Emulated virtual controllers (if the gamepad path is used).
+
+## 6. Fix the resolution + calibrate HUD crops (once, then never change)
 
 Set Vampire Survivors to WINDOWED mode at a fixed resolution. Then fill
 the `hud_regions` crop boxes `[x0, y0, x1, y1]` in `spine/config.yaml`
 (hp, level, timer, level_up_options) measured in window pixels. Leave
-them `null` only for a first smoke test; accurate HUD/leader behaviour
+them `null` only for a first smoke test; accurate HUD/planner behaviour
 needs them.
 
 ## When done
@@ -56,3 +61,4 @@ needs them.
 Confirm here in writing, then the BUILDER resumes at G0 through Doppler
 and records evidence in status/gates.md.
 Delete status/BLOCKED.md when the environment is up.
+

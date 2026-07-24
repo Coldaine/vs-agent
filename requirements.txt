@@ -1,6 +1,8 @@
 # spine runtime dependencies
 # Model I/O
 openai>=1.30
+# Menu navigation vision agent (G0)
+smolagents>=1.0
 # Perception
 ultralytics>=8.2        # YOLOv8 detector (forked weights provisioned separately)
 opencv-python>=4.9

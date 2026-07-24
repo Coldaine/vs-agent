@@ -197,6 +197,14 @@ class IOAdapter:
         self._create_gamepad()
         self._gamepad_recoveries += 1
         print(f"[gamepad] recreated after input failure: {error}")
+        
+        # Probe game response to ensure the new gamepad took a valid slot
+        try:
+            import input_health
+            if not input_health.probe_health(self):
+                print("[gamepad] WARNING: Game did not respond to input probe after recovery. May be in a dead slot.")
+        except Exception:
+            pass
 
     def _with_gamepad(self, action) -> None:
         if self._gamepad is None:
@@ -370,19 +378,50 @@ class IOAdapter:
             self._keys.keyDown(k)
         self._held = target
 
-    def hold_direction(self, direction: str) -> None:
-        """Begin holding a movement direction. Replaces any prior hold.
-        'HOLD' = release movement, keep position."""
+    def hold_direction(self, direction: str, speed: float = 1.0) -> None:
+        """Begin holding a movement direction at a given duty cycle [0.0, 1.0].
+        Replaces any prior hold. 'HOLD' = release movement, keep position."""
         if self._input_backend == "gamepad":
-            x_value, y_value = _GAMEPAD_DIRECTIONS.get(direction, (0, 0))
+            x_val, y_val = _GAMEPAD_DIRECTIONS.get(direction, (0, 0))
             self._with_gamepad(
                 lambda gamepad: gamepad.left_joystick(
-                    x_value=x_value, y_value=y_value))
+                    x_value=int(x_val * speed), y_value=int(y_val * speed)))
             return
-        self._press_keys(_DIR_KEYS.get(direction, ()))
+            
+        keys = _DIR_KEYS.get(direction, ())
+
+        # Supersede any running PWM thread by bumping the generation id.
+        self._pwm_gen = getattr(self, "_pwm_gen", 0) + 1
+
+        if speed >= 0.99 or not keys:
+            self._press_keys(keys)
+            return
+
+        # Pulse the keys at duty cycle `speed` on a background thread. The
+        # thread runs only while it owns the current generation id, so a
+        # newer hold_direction()/neutralize() call cleanly retires it.
+        import threading
+        gen = self._pwm_gen
+        period = 0.1                      # 100 ms duty-cycle window
+        on_time = period * speed
+        off_time = period - on_time
+
+        def pwm_loop():
+            while self._pwm_gen == gen:
+                if on_time > 0:
+                    self._press_keys(keys)
+                    time.sleep(on_time)
+                if self._pwm_gen != gen:
+                    break
+                if off_time > 0:
+                    self._press_keys(())
+                    time.sleep(off_time)
+
+        threading.Thread(target=pwm_loop, daemon=True).start()
 
     def neutralize(self) -> None:
         """ALL inputs to neutral. Idempotent. Called on every exit path."""
+        self._pwm_gen = getattr(self, "_pwm_gen", 0) + 1
         if self._gamepad is not None:
             try:
                 self._gamepad.reset()

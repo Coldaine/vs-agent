@@ -1,63 +1,52 @@
-# spine/config.yaml — controller parameters (Loop C may mutate these)
 tick_hz: 2
 collision_radius_px: 90
 staleness_ms: 800
 dither_ms: 300
 escape_vector_k: 5
 gem_pull_weight: 0.3
-
-# eval conditions (FIXED — never change and compare scores across)
-stage: "Mad Forest"
-character: "Antonio"
+stage: Mad Forest
+character: Antonio
 arcanas: false
-
-# perception
-level_up_ocr_trigger: "LEVEL UP"
-death_ocr_triggers: ["YOU DIED", "GAME OVER"]
-run_end_ocr_triggers: ["REAPER", "TIME'S UP"]
-game_process_hint: "VampireSurvivors"
-window_title_hint: "Vampire Survivors"
-steam_app_id: "1794680"
+level_up_ocr_trigger: LEVEL UP
+death_ocr_triggers:
+- YOU DIED
+- GAME OVER
+run_end_ocr_triggers:
+- REAPER
+- TIME'S UP
+game_process_hint: VampireSurvivors
+window_title_hint: Vampire Survivors
+steam_app_id: '1794680'
 capture_backend: wgc
 input_backend: keyboard
 gamepad_ready_timeout_s: 3.0
 gamepad_create_retries: 3
 gamepad_recreate_on_error: true
 gamepad_button_hold_s: 0.3
-# This save starts on Gennaro (row 2, col 1); Antonio is row 1, col 2.
-antonio_selection_path: [up, right]
-# WGC frame coordinates on the physical left monitor (origin -2560, 0).
-wgc_monitor_origin: [-2560, 0]
-mad_forest_frame_point: [1690, 285]
-confirm_frame_point: [1640, 1380]
-# DXCam output zero is the primary display. This game window runs on output 1.
+wgc_monitor_origin:
+- -2560
+- 0
 capture_output_idx: 1
-capture_min_dimensions: [640, 480]
+capture_min_dimensions:
+- 640
+- 480
 capture_retries: 3
 key_diff_threshold: 0.02
 movement_diff_threshold: 0.1
-tesseract_cmd: "C:/Program Files/Tesseract-OCR/tesseract.exe"
-menu_ocr_config: "--psm 6"
-
-# detector (PROVISIONING — see status/HUMAN_NEEDED.md)
-# Upstream monster_class.pt detects threats only; it does not label gems/elites.
-yolo_weights: "spine/weights/monster_class.pt"
+tesseract_cmd: C:/Program Files/Tesseract-OCR/tesseract.exe
+menu_ocr_config: --psm 6
+yolo_weights: spine/weights/monster_class.pt
 yolo_conf: 0.25
-# map each model class NAME to a kind the reflex layer understands
 yolo_class_map:
   monster: enemy
-
-# OCR crop regions [x0, y0, x1, y1] in window pixels (resolution-specific,
-# set once at fixed resolution). null = OCR whole frame / best-effort.
 hud_regions:
   hp: null
   level: null
   timer: null
   level_up_options: null
-
-# paths
-episodes_dir: "episodes"
-eval_set_dir: "eval_set"
-failures_log: "failures.jsonl"
-theories_log: "theories.jsonl"
-experiments_log: "experiments.log"
+episodes_dir: episodes
+eval_set_dir: eval_set
+failures_log: failures.jsonl
+theories_log: theories.jsonl
+experiments_log: experiments.log
+nav_max_turns: 12

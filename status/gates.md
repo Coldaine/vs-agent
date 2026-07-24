@@ -23,7 +23,7 @@ BUILDER work completed (code, no live env required):
 - **Seam 3 — spine/perceive.py**: FILLED. ultralytics YOLO wiring
   (weights + class map from config), player fixed at frame centre
   (player-locked camera, game_reference §1), OCR-based screen_type /
-  read_options / hud_state, state_summary for the follower, to_jpeg,
+  read_options / hud_state, state_summary for the pilot, to_jpeg,
   and load_image (verify_perception seam).
 - **Defect fix — spine/run.py**: level-up handler referenced an
   undefined `brief`; corrected to `shared["brief"]` per the mutable-cell
@@ -189,3 +189,4 @@ doppler run -- python spine/run.py --reflex-only
 - key_diff: 0.911
 - key_ocr_before: a@  ae Character Selection 7  -.  &  me oreres  = ess) (? 1 :  | ry an : ah  ® : . : gy A | 2 Ss Bio ¢: »  Bit | ftw) ¥E 2  a  fe 2S 4) a9  i _ ' a  ms y ial 
 - key_ocr_after: wt  ; ie  ’ ? e +35% oy Sy oS a oF ay +420% ar : Bla oS ol ole & +1 5 3 a - a eZ, ey | a- qi a +50% ' bx 30% a | -  +50% ’ ied +4 re 4 a oI) +10 | comer ser | :  ft a = jo dit 
+
