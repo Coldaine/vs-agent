@@ -1,0 +1,26 @@
+# Classic leader–follower path from the plan:
+# fast OpenAI-compatible VLM (~2 Hz) + slow strategy leader on pauses.
+inherits: configs/default.yaml
+
+loop:
+  mode: sim                 # set to live on the game PC
+  control_style: vlm_follower
+  follower_hz: 2.0          # plan: ~every 500 ms
+  sim_seconds: 30.0
+  auto_launch: true
+
+mover:
+  approach_id: fast_vlm
+
+wrapper:
+  enabled: true
+  commit_ms: 500            # sticky between VLM ticks
+  breakout_commit_ms: 450
+
+perception:
+  # Geometry assist still available; VLM mover can fall back to sector_density offline
+  backend: mock
+
+openai:
+  follower_model: "${VS_FOLLOWER_MODEL:-gpt-4o-mini}"
+  leader_model: "${VS_LEADER_MODEL:-gpt-4o}"

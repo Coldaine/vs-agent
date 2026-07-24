@@ -1,0 +1,44 @@
+# Minimal Vampire Survivors evolution pairs for the strategy leader
+evolutions:
+  - weapon: Whip
+    passive: Hollow Heart
+    evolved: Bloody Tear
+  - weapon: Magic Wand
+    passive: Empty Tome
+    evolved: Holy Wand
+  - weapon: Knife
+    passive: Bracer
+    evolved: Thousand Edge
+  - weapon: Axe
+    passive: Candelabrador
+    evolved: Death Spiral
+  - weapon: Cross
+    passive: Clover
+    evolved: Heaven Sword
+  - weapon: King Bible
+    passive: Spellbinder
+    evolved: Unholy Vespers
+  - weapon: Fire Wand
+    passive: Spinach
+    evolved: Hellfire
+  - weapon: Garlic
+    passive: Pummarola
+    evolved: Soul Eater
+  - weapon: Santa Water
+    passive: Attractorb
+    evolved: La Borra
+  - weapon: Runetracer
+    passive: Armor
+    evolved: No Future
+  - weapon: Lightning Ring
+    passive: Duplicator
+    evolved: Thunder Loop
+  - weapon: Pentagram
+    passive: Crown
+    evolved: Gorgeous Moon
+
+policy_hints:
+  - Prefer evolving 1-2 core weapons over filling every slot with weak weapons.
+  - Passives that enable evolutions outrank random damage passives early.
+  - Growth / Amount / Cooldown are generally high value when offered.
+  - When boxed, survival > gem vacuum.

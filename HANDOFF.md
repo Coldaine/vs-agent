@@ -80,3 +80,9 @@ commit message.
   then halt. Never improvise around capture/input failures.
 - Need the human (rare): status/HUMAN_NEEDED.md with exact
   instructions, then continue anything not blocked on it.
+
+## Side inspiration (cloud rescue)
+
+Orphaned cloud harness work lives under `sideInspiration/` for review only.
+See `sideInspiration/README.md`. It does not replace `spine/` or change gate order;
+adopt tooling from it only where needed.
