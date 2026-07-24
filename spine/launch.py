@@ -16,8 +16,11 @@ def launch_game(cfg):
 def _checkpoint(io, expected_text: str, timeout_s: float = 15) -> bool:
     t0 = time.monotonic()
     while time.monotonic() - t0 < timeout_s:
-        if expected_text.lower() in io.ocr().lower():
-            return True
+        try:
+            if expected_text.lower() in io.ocr().lower():
+                return True
+        except Exception:
+            pass
         time.sleep(1.0)
     return False
 
