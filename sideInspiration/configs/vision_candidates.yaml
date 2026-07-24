@@ -1,0 +1,144 @@
+# Vision / VLM candidate registry for Vampire Survivors harness bakeoffs.
+# Roles: perception (masks/boxes), fast_mover (heading), slow_leader (builds/intent)
+# Latency tiers are approximate on a strong GPU (e.g. RTX 5090); measure locally.
+
+candidates:
+  # --- Perception (preferred for movement geometry) ---
+  - id: sam3_1
+    role: perception
+    kind: concept_segmentation
+    package: facebookresearch/sam3
+    notes: >
+      Promptable concept masks; union threat field (no track IDs). Best quality free-space carve.
+      Image PCS ~30ms @100+ objs on H200-class; video multiplex helps tracking but we discard IDs.
+    latency_tier: mid   # tens of ms
+    harness_backend: sam3
+    priority: 1
+
+  - id: yolo_world
+    role: perception
+    kind: open_vocab_detection
+    package: ultralytics / AILab-CVC/YOLO-World
+    notes: >
+      Boxes from text prompts at YOLO speed; dilate boxes → threat mask. Much faster than SAM,
+      coarser free-space boundaries. Strong first bakeoff vs SAM on the 5090.
+    latency_tier: fast  # ~real-time tens of FPS
+    harness_backend: yolo_world
+    priority: 1
+
+  - id: rfdetr_seg
+    role: perception
+    kind: instance_segmentation
+    package: roboflow/rf-detr
+    notes: >
+      Real-time DETR + mask head (Nano~ms on T4-class). Needs fine-tune or class mapping for VS sprites;
+      excellent once you have a small labeled set. Not open-vocab zero-shot like SAM/YOLO-World.
+    latency_tier: very_fast
+    harness_backend: rfdetr  # stub / future
+    priority: 2
+
+  - id: optical_flow
+    role: perception
+    kind: classical_motion
+    notes: >
+      Farneback/DIS flow magnitude as dynamic threat prior. Catches approaching swarms between
+      heavy-model ticks; poor alone (gems/FX also move). Use as fusion prior or SAM/YOLO skip-frame filler.
+    latency_tier: very_fast
+    harness_backend: optical_flow
+    priority: 2
+
+  - id: color_heuristic
+    role: perception
+    kind: classical_color
+    notes: Sim / debug only unless you lock a fixed palette. Harness mock uses this + sim GT.
+    latency_tier: very_fast
+    harness_backend: color_heuristic
+    priority: 3
+
+  # --- Fast mover VLMs (heading proposals; not primary geometry) ---
+  - id: smolvlm2_500m
+    role: fast_mover
+    kind: local_vlm
+    hf_id: HuggingFaceTB/SmolVLM2-500M-Video-Instruct
+    notes: >
+      Best size/speed trade for on-box VLM. Use for mode/caption/bias (~2–10 Hz), not sole dodge brain.
+      Prefer OpenAI-compatible local server (vLLM/llama.cpp/MLX) pointed at follower_model.
+    latency_tier: mid
+    harness_mover: fast_vlm
+    openai_model_hint: smolvlm2-500m
+    priority: 1
+
+  - id: smolvlm2_256m
+    role: fast_mover
+    kind: local_vlm
+    notes: Ultra-small; good for sticky 8-way JSON if 500M is heavy. Expect weaker spatial judgment.
+    latency_tier: fast
+    harness_mover: fast_vlm
+    openai_model_hint: smolvlm2-256m
+    priority: 2
+
+  - id: moondream2
+    role: fast_mover
+    kind: local_vlm
+    notes: Tiny VLM lineage; useful control if you already serve it OpenAI-compatibly.
+    latency_tier: mid
+    harness_mover: fast_vlm
+    openai_model_hint: moondream2
+    priority: 2
+
+  - id: minicpm_o
+    role: fast_mover
+    kind: local_vlm
+    notes: >
+      Cited in slow-fast game-agent work as a reactive VLM. Candidate for high-Hz heading/bias
+      while a larger leader plans builds.
+    latency_tier: mid
+    harness_mover: fast_vlm
+    openai_model_hint: minicpm-o
+    priority: 2
+
+  - id: gpt4o_mini_remote
+    role: fast_mover
+    kind: remote_vlm
+    notes: Convenient baseline; often >500ms RTT — keep as control, not hot-path dodge.
+    latency_tier: slow
+    harness_mover: fast_vlm
+    openai_model_hint: gpt-4o-mini
+    priority: 3
+
+  # --- Slow leader ---
+  - id: qwen25_vl_7b_or_larger
+    role: slow_leader
+    kind: local_or_remote_vlm
+    notes: Strong paused level-up / inventory OCR+choice. Latency OK because UI pauses.
+    latency_tier: slow
+    openai_model_hint: qwen2.5-vl
+    priority: 1
+
+  - id: gpt4o_leader
+    role: slow_leader
+    kind: remote_vlm
+    notes: Default remote leader in configs/default.yaml.
+    latency_tier: slow
+    openai_model_hint: gpt-4o
+    priority: 1
+
+recommended_bakeoff_order:
+  perception:
+    - color_heuristic   # sanity / sim
+    - optical_flow      # motion prior alone (expect weak)
+    - yolo_world        # speed vs SAM
+    - sam3_1            # quality free-space
+    # later: yolo_world+optical_flow fusion, rfdetr after fine-tune
+  movers_with_best_perception:
+    - free_space_corridor
+    - sector_density
+    - potential_field
+    - fast_vlm          # with local SmolVLM2 if available
+  wrappers: [true, false]
+
+design_guidance:
+  - Prefer classical/open-vocab masks for movement; VLMs for bias + paused strategy.
+  - Literature shows tiny specialized controllers beat huge VLMs on real-time games when latency matters.
+  - Slow-fast pairing helps only when the slow model already beats fast-only on the task.
+  - Distill good runs into a tiny heading CNN/MLP later; keep VLMs for bootstrap and leader.

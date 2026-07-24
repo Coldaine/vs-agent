@@ -1,0 +1,25 @@
+# Comparative mover bakeoff — each cell is approach_id × wrapper on/off
+inherits: configs/default.yaml
+
+loop:
+  mode: sim
+  sim_seconds: 8.0
+
+host:
+  target_fps: 45
+  capture_backend: mock
+
+trace:
+  save_masks_rle: false
+
+bakeoff:
+  trials_per_config: 2
+  sim_seconds: 8.0
+  approaches:
+    - free_space_corridor
+    - sector_density
+    - potential_field
+    - fast_vlm
+  wrapper_modes: [true, false]
+  seeds: [1, 2, 3, 4, 5]
+  report_path: "runs/bakeoff_report.json"

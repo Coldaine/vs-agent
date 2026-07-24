@@ -1,0 +1,26 @@
+inherits: configs/default.yaml
+
+loop:
+  mode: sim
+
+host:
+  target_fps: 60
+  capture_backend: mock
+
+trace:
+  save_masks_rle: false
+
+perception_bakeoff:
+  backends:
+    - mock
+    - color_heuristic
+    - optical_flow
+    # Uncomment on the 5090 when installed:
+    # - yolo_world
+    # - sam3
+    # - fusion_yolo_flow
+  frames: 30
+  seeds: [1, 2]
+  mover_for_episode: sector_density
+  episode_seconds: 5.0
+  report_path: runs/perception_bakeoff_report.json
