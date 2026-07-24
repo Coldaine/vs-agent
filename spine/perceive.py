@@ -141,7 +141,7 @@ def hud_state(frame) -> dict:
 
 
 def state_summary(frame) -> dict:
-    """Compact JSON state for the follower prompt's {{STATE_JSON}}."""
+    """Compact JSON state for the pilot prompt's {{STATE_JSON}}."""
     dets, player = detect(frame)
     hud = hud_state(frame)
     return {
@@ -174,3 +174,4 @@ def log_protocol_violation(raw_output: str):
     import json, time
     with open("protocol_violations.jsonl", "a") as f:
         f.write(json.dumps({"raw": raw_output, "t": time.time()}) + "\n")
+

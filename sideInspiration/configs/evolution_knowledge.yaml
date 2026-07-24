@@ -1,4 +1,4 @@
-# Minimal Vampire Survivors evolution pairs for the strategy leader
+# Minimal Vampire Survivors evolution pairs for the strategy planner
 evolutions:
   - weapon: Whip
     passive: Hollow Heart
@@ -42,3 +42,4 @@ policy_hints:
   - Passives that enable evolutions outrank random damage passives early.
   - Growth / Amount / Cooldown are generally high value when offered.
   - When boxed, survival > gem vacuum.
+

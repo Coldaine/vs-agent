@@ -10,7 +10,7 @@ class EpisodeWriter:
         os.makedirs(os.path.join(self.dir, "frames"), exist_ok=True)
         os.makedirs(os.path.join(self.dir, "keyframes"), exist_ok=True)
         self._states = open(os.path.join(self.dir, "states.jsonl"), "a")
-        self._leader = open(os.path.join(self.dir, "leader.jsonl"), "a")
+        self._planner = open(os.path.join(self.dir, "planner.jsonl"), "a")
         self.t0 = time.monotonic()
 
     def t(self) -> float:
@@ -27,11 +27,11 @@ class EpisodeWriter:
         }) + "\n")
         self._states.flush()
 
-    def log_leader(self, options, pick, why, brief_update):
-        self._leader.write(json.dumps({
+    def log_planner(self, options, pick, why, brief_update):
+        self._planner.write(json.dumps({
             "t": round(self.t(), 2), "options": options, "pick": pick,
             "why": why, "brief_update": brief_update}) + "\n")
-        self._leader.flush()
+        self._planner.flush()
 
     def save_frame(self, image_bytes: bytes, keyframe: bool = False, name: str | None = None):
         sub = "keyframes" if keyframe else "frames"
@@ -47,9 +47,10 @@ class EpisodeWriter:
                 "invalid": invalid,
                 "prompt_hashes": prompt_hashes}, f, indent=2)
         self._states.close()
-        self._leader.close()
+        self._planner.close()
 
 
 def hash_prompt(path: str) -> str:
     with open(path, "rb") as f:
         return hashlib.sha256(f.read()).hexdigest()[:12]
+

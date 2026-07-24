@@ -17,7 +17,7 @@ episodes/run_<n>/
       "follower_latency_ms": 412,
       "action": "SE"
     }
-  leader.jsonl       one line per level-up:
+  planner.jsonl       one line per level-up:
     {"t": 95.0, "options": [...], "pick": "...", "why": "...",
      "brief_update": "..."}
   keyframes/         run start, each level-up, t-60s before death,
@@ -25,8 +25,8 @@ episodes/run_<n>/
   outcome.json
     {"survived_s": 612, "level": 14, "kills": 3211,
      "cause_of_death": null,        # filled by review, not at runtime
-     "invalid": false,              # true if follower p95 > 800ms etc.
-     "prompt_hashes": {"follower": "...", "leader": "..."}}
+     "invalid": false,              # true if pilot p95 > 800ms etc.
+     "prompt_hashes": {"pilot": "...", "planner": "..."}}
 ```
 
 ## Review packet (assembled by spine/review.py, fed to sub-agents)
@@ -34,13 +34,13 @@ episodes/run_<n>/
 - states.jsonl sampled 1 per 5s + ALL entries in final 60s
 - the 6 keyframes
 - outcome.json
-- current follower.md + leader.md
+- current pilot.md + planner.md
 - failure-type histogram from failures.jsonl (for label reuse)
 - an INSPECTION DIRECTIVE, generated from telemetry:
   - scan rule_fired rates in 60s windows; any window where
     (veto+stale+dither)/ticks exceeds 2x the run median = anomaly
   - anomaly -> directive naming the window and the question
-    ("was the follower wrong, or the reflex layer over-sensitive?")
+    ("was the pilot wrong, or the reflex layer over-sensitive?")
   - no anomaly -> directive is the literal string "full autopsy"
 
 ## Theory packet (assembled for prompts/theorist.md)
@@ -49,7 +49,7 @@ episodes/run_<n>/
 - the keyframe strip for the failure window: 8-12 JPEGs, with
   before/during/after triplets at the turning point
 - the states.jsonl window around the event
-- current follower.md, leader.md, spine/config.yaml
+- current pilot.md, planner.md, spine/config.yaml
 - theories.jsonl entries for prior theories in the same failure class
 
 ## theories.jsonl (append-only causal ledger)
@@ -79,3 +79,4 @@ Status changes are APPENDED as new lines, never edited in place:
   (frame, state, correct_action).
 - Keep them in separate files: corpus/positive.jsonl,
   corpus/corrective.jsonl. Never mix without labels.
+

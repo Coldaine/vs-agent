@@ -1,10 +1,10 @@
 """replay_eval.py — Loop P offline scoring. No game required.
 
-Scores a follower-prompt variant against eval_set/ AND the failure
+Scores a pilot-prompt variant against eval_set/ AND the failure
 gallery. Promotion rule (GOAL.md): must beat the champion AND flip its
 target gallery frames without regressing >2% of the rest.
 
-Usage: python spine/replay_eval.py --prompt prompts/follower.md
+Usage: python spine/replay_eval.py --prompt prompts/pilot.md
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ def score_prompt(prompt_path: str) -> dict:
     agree, field_ok, lat, per_row = 0, 0, [], []
     for row in rows:
         t0 = time.monotonic()
-        out = model_client.call_follower_eval(prompt, row["frame"])
+        out = model_client.call_pilot_eval(prompt, row["frame"])
         lat.append((time.monotonic() - t0) * 1000)
         action_ok = out["action"] == row["correct_action"]
         fields_ok = all(out.get(k) == row[k] for k in
@@ -67,3 +67,4 @@ if __name__ == "__main__":
     args = ap.parse_args()
     res = score_prompt(args.prompt)
     print(json.dumps({k: v for k, v in res.items() if k != "rows"}, indent=2))
+

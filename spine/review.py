@@ -31,7 +31,7 @@ def generate_directive(states: list[dict]) -> str:
         return (f"Override rate spiked to {worst_rate:.0%} during "
                 f"t={worst:.0f}-{worst+window:.0f} (run median "
                 f"{median_rate:.0%}). Inspect that window: was the "
-                "follower wrong, or was the reflex layer over-sensitive?")
+                "pilot wrong, or was the reflex layer over-sensitive?")
     return "full autopsy"
 
 
@@ -61,8 +61,8 @@ def review_run(run_dir: str):
 
     autopsy = model_client.call_subagent(
         autopsy_prompt, packet, keyframes=packet["keyframes"])
-    leader_log = [json.loads(l) for l in open(os.path.join(run_dir, "leader.jsonl"))] \
-        if os.path.exists(os.path.join(run_dir, "leader.jsonl")) else []
+    leader_log = [json.loads(l) for l in open(os.path.join(run_dir, "planner.jsonl"))] \
+        if os.path.exists(os.path.join(run_dir, "planner.jsonl")) else []
     build = model_client.call_subagent(
         build_prompt, {"leader_log": leader_log, "outcome": packet["outcome"]})
 
@@ -82,3 +82,4 @@ def review_run(run_dir: str):
 
 if __name__ == "__main__":
     review_run(sys.argv[1])
+

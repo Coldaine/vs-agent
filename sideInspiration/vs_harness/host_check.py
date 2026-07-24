@@ -57,7 +57,7 @@ def run_check(config_path: str) -> int:
     print("\nHost assumptions for live play:")
     print("  1. RTX 5090 (or similar) machine with Vampire Survivors via Steam")
     print("  2. Game in windowed / borderless windowed (not exclusive fullscreen)")
-    print("  3. VS_OPENAI_BASE_URL + VS_OPENAI_API_KEY for leader/follower (OpenAI-compatible)")
+    print("  3. VS_OPENAI_BASE_URL + VS_OPENAI_API_KEY for planner/pilot (OpenAI-compatible)")
     print("  4. Optional: sam3/ultralytics/torch for perception backends")
     print("  5. Classic plan path: configs/vlm_follower.yaml (follower_hz=2)")
     print("  6. Kill switch: press F8 during live runs")
@@ -72,7 +72,7 @@ def run_check(config_path: str) -> int:
         print("ERROR: openai.base_url missing")
         ok = False
     if not endpoints.get("api_key_set"):
-        print(f"WARN: {endpoints['api_key_env']} unset — leader/fast_vlm live calls will fail (sim still works)")
+        print(f"WARN: {endpoints['api_key_env']} unset — planner/fast_vlm live calls will fail (sim still works)")
 
     print("\nRESULT:", "OK" if ok else "FAILED")
     return 0 if ok else 1
@@ -92,3 +92,4 @@ def main(argv: list[str] | None = None) -> None:
 
 if __name__ == "__main__":
     main()
+

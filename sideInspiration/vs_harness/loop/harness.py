@@ -9,8 +9,8 @@ from vs_harness.config import load_config
 from vs_harness.control.commit_breakout import build_wrapper
 from vs_harness.control.input_injector import InputInjector
 from vs_harness.control.kill_switch import KillSwitch
-from vs_harness.leader.menu import handle_paused_ui
-from vs_harness.leader.strategy import StrategyLeader
+from vs_harness.planner.menu import handle_paused_ui
+from vs_harness.planner.strategy import StrategyLeader
 from vs_harness.mode.detector import ModeDetector
 from vs_harness.movers.registry import build_mover
 from vs_harness.perception.factory import build_perception
@@ -33,7 +33,7 @@ def run_episode(
     mode = loop.get("mode", "sim")
     seed = int(seed if seed is not None else loop.get("sim_seed", 0))
     duration = float(sim_seconds if sim_seconds is not None else loop.get("sim_seconds", 45.0))
-    # Classic plan path: VLM follower at ~2 Hz with sticky keys
+    # Classic plan path: VLM pilot at ~2 Hz with sticky keys
     follower_hz = float(loop.get("follower_hz", 0.0))
 
     # Parked under sideInspiration: simulation only. Live I/O must go through
@@ -64,7 +64,7 @@ def run_episode(
     mover = build_mover(cfg, approach_id=approach_id)
     approach = mover.approach_id
     wrapper = build_wrapper(cfg, approach_id=approach, enabled=wrapper_enabled)
-    leader = StrategyLeader(cfg)
+    planner = StrategyLeader(cfg)
     detector = ModeDetector()
 
     injector = InputInjector(live=(mode == "live"))
@@ -104,7 +104,7 @@ def run_episode(
     t0 = time.perf_counter()
     headings: list[str] = []
     breakouts = 0
-    last_intent_mode = leader.intent.mode
+    last_intent_mode = planner.intent.mode
     last_follower_t = 0.0
     last_cmd_heading = "HOLD"
     levelup_events = 0
@@ -125,20 +125,20 @@ def run_episode(
             cap = capture.grab()
             screen = detector.detect(cap.frame_bgr)
 
-            # Paused UI → leader chooses (attached plan leader loop)
+            # Paused UI → planner chooses (attached plan planner loop)
             if screen in (ScreenMode.LEVELUP, ScreenMode.CHEST) and mode == "live":
-                decision = handle_paused_ui(screen, cap.frame_bgr, leader, injector, now)
+                decision = handle_paused_ui(screen, cap.frame_bgr, planner, injector, now)
                 levelup_events += 1
                 writer.write({"type": "levelup", "t": elapsed, **decision})
                 last_intent_mode = decision["intent"].get("mode", last_intent_mode)
                 time.sleep(0.1)
                 continue
 
-            intent = leader.maybe_refresh(screen, cap.frame_bgr, now)
+            intent = planner.maybe_refresh(screen, cap.frame_bgr, now)
             if intent.mode != last_intent_mode:
                 writer.write(
                     {
-                        "type": "leader",
+                        "type": "planner",
                         "t": elapsed,
                         "intent": intent.to_dict(),
                         "trigger": screen.value,
@@ -154,7 +154,7 @@ def run_episode(
                     time.sleep(0.05)
                     continue
 
-            # Optional follower cadence (plan: ~2 Hz VLM); between ticks keep sticky keys
+            # Optional pilot cadence (plan: ~2 Hz VLM); between ticks keep sticky keys
             if follower_hz > 0 and (now - last_follower_t) < (1.0 / follower_hz):
                 injector.set_keys(_heading_keys(last_cmd_heading))
                 if sim is not None:
@@ -262,3 +262,4 @@ def run_from_config_path(
         wrapper_enabled=wrapper_enabled,
         seed=seed,
     )
+

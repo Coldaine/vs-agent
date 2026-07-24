@@ -14,7 +14,7 @@ Live keyboard/window control is intentionally disabled so it cannot bypass
 
 | Path | Contents |
 |---|---|
-| `vs_harness/` | Leader–follower harness (SAM/YOLO perception, movers, bakeoff, traces) |
+| `vs_harness/` | planner–pilot harness (SAM/YOLO perception, movers, bakeoff, traces) |
 | `sam3_service/` | **Recommended** GPU Docker sidecar for SAM 3 image PCS (`:8090`) |
 | `configs/` | Harness YAML |
 | `scripts/` | Entry scripts |
@@ -37,3 +37,4 @@ See [`sam3_service/README.md`](sam3_service/README.md). Image PCS, not video mul
 
 Authority for the product remains `HANDOFF.md` / `GOAL.md` / `spine/`.
 Do not treat this package as a second spine.
+

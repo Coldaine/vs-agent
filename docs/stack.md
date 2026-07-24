@@ -28,20 +28,20 @@
    computation. (LonesomeSoul/Vampire_survivors_bot_CV is a CV-based
    alternative reference.)
 3. **Model endpoints** — OpenRouter's `openrouter/free` router provides
-   the follower and labeler with free image-capable models; direct
-   DeepSeek V4 Flash provides text-only leader/reviewer reasoning. Keys
+   the pilot and labeler with free image-capable models; direct
+   DeepSeek V4 Flash provides text-only planner/reviewer reasoning. Keys
    are injected into the process, normally through Doppler; this repo
    does not pin a Doppler project or config.
 
 ## Model selection (as of July 2026 — re-verify before G2)
 
 - BUILDER: whatever the ChatGPT-OAuth Codex subscription serves.
-- LEADER + review/theorist sub-agents: direct `deepseek-v4-flash`, with
+- planner + review/theorist sub-agents: direct `deepseek-v4-flash`, with
   DeepSeek thinking effort set to `max` by default.
-- FOLLOWER + labeler: `openrouter/free`, which selects a currently-free
+- pilot + labeler: `openrouter/free`, which selects a currently-free
   model compatible with image input. Free availability is transient, so
   benchmark a paid replacement before relying on it for evals.
-- FOLLOWER local (RTX 5090, 32GB — preferred end state before
+- pilot local (RTX 5090, 32GB — preferred end state before
   distillation): trial in this order via vLLM's OpenAI server:
   Qwen3-VL-4B, Qwen3-VL-8B, Gemma 4 12B, InternVL3.5-8B
   (InternVL needs --trust-remote-code; cap input ~896px or visual
@@ -64,11 +64,11 @@
 ## What the BUILDER writes (~300 lines target)
 
 - `spine/run.py` — episode loop: launch/focus game window, tick at
-  ~2Hz (MCP screenshot -> reflex layer -> follower call -> MCP key),
-  level-up screen detection (OCR/template) -> leader call -> menu
+  ~2Hz (MCP screenshot -> reflex layer -> pilot call -> MCP key),
+  level-up screen detection (OCR/template) -> planner call -> menu
   click, death detection, episode writer per docs/trace_spec.md.
 - `spine/reflex.py` — threat vectors from YOLO detections; overrides
-  follower direction when nearest enemy is within collision radius.
+  pilot direction when nearest enemy is within collision radius.
 - `spine/review.py` — assembles review packets, spawns fresh-context
   review sub-agents (autopsy + build audit), writes failures.jsonl.
 - `spine/verify_perception.py` — G2 gate helper.
@@ -77,8 +77,8 @@
 
 - BUILDER (this agent): writes/maintains code and prompts; runs the
   experiment loop in GOAL.md. Never plays.
-- FOLLOWER: real-time movement, 8-direction + HOLD, ~500ms cadence.
-- LEADER: level-up picks, strategy brief, run strategy. Never steers.
+- pilot: real-time movement, 8-direction + HOLD, ~500ms cadence.
+- planner: level-up picks, strategy brief, run strategy. Never steers.
 
 ## Known failure modes this design defends against
 
@@ -90,3 +90,4 @@
   survived_s only; unanchored self-critique is forbidden.
 - Eval variance -> fixed stage/character, 3-5 runs per experiment,
   median not mean.
+

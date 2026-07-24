@@ -5,8 +5,8 @@ never read from a project-specific Doppler scope or committed ``.env`` file:
   DEEPSEEK_API_KEY    — direct DeepSeek V4 Flash text/reasoning calls
   OPENROUTER_API_KEY  — OpenRouter's free vision router
 
-The follower and frame-labeling calls use OpenRouter's ``openrouter/free``
-model because they require image input. The leader and review calls use the
+The pilot and frame-labeling calls use OpenRouter's ``openrouter/free``
+model because they require image input. The planner and review calls use the
 direct DeepSeek API because they are text-only roles.
 """
 
@@ -45,7 +45,7 @@ def _endpoint(role: str) -> tuple[str, str, str]:
     """Return the fixed provider endpoint and injected credential for a role."""
     role = role.upper()
     provider = (_FREE_OPENROUTER_VISION
-                if role in {"FOLLOWER", "LABELER", "AUDITOR"}
+                if role in {"PILOT", "LABELER", "AUDITOR"}
                 else _DIRECT_DEEPSEEK)
     key = os.environ.get(provider["key_name"])
     if not key:
@@ -121,7 +121,7 @@ def _chat(role: str, messages: list, fn: str, prompt_hash: str,
     ok = False
     try:
         request = {"model": model, "messages": messages, "max_tokens": max_tokens}
-        if role.upper() in {"LEADER", "REVIEWER"}:
+        if role.upper() in {"PLANNER", "REVIEWER"}:
             request["reasoning_effort"] = os.environ.get(
                 "DEEPSEEK_REASONING_EFFORT", "max")
             request["extra_body"] = {"thinking": {"type": "enabled"}}
@@ -138,8 +138,9 @@ def _chat(role: str, messages: list, fn: str, prompt_hash: str,
 # ---------------------------------------------------------------------------
 # runtime calls
 # ---------------------------------------------------------------------------
-def call_follower(prompt_text: str, state: dict, frame, brief: str) -> str:
-    """Returns one of: N NE E SE S SW W NW HOLD. Single token.
+def call_pilot(prompt_text: str, state: dict, frame, brief: str) -> tuple[str, float]:
+    """Returns (direction, speed). Direction is one of: N NE E SE S SW W NW HOLD. 
+    Speed is a float [0.0, 1.0].
     prompt_text contains {{STRATEGY_BRIEF}} and {{STATE_JSON}} slots."""
     filled = (prompt_text
               .replace("{{STRATEGY_BRIEF}}", brief or "")
@@ -148,13 +149,25 @@ def call_follower(prompt_text: str, state: dict, frame, brief: str) -> str:
     messages = [{"role": "user", "content": [
         {"type": "text", "text": filled},
         _image_content(frame)]}]
-    content = _chat("FOLLOWER", messages, "call_follower", _hash(filled),
-                    max_tokens=8)
-    token = content.strip().upper().split()[0] if content.strip() else "HOLD"
-    return re.sub(r"[^A-Z]", "", token)  # controller validates + logs vocab
+    content = _chat("PILOT", messages, "call_pilot", _hash(filled),
+                    max_tokens=16)
+    
+    parts = content.strip().upper().split()
+    token = parts[0] if parts else "HOLD"
+    token = re.sub(r"[^A-Z]", "", token)
+    
+    speed = 1.0
+    if len(parts) > 1:
+        try:
+            speed = float(re.sub(r"[^0-9\.]", "", parts[1]))
+            speed = max(0.0, min(1.0, speed))
+        except ValueError:
+            pass
+            
+    return token, speed
 
 
-def call_follower_eval(prompt_text: str, frame_path: str) -> dict:
+def call_pilot_eval(prompt_text: str, frame_path: str) -> dict:
     """Loop P variant: returns {"action": ..., "threat_octant": ...,
     "gem_octant": ..., "is_level_up": ...} for scoring."""
     suffix = ("\n\nFor evaluation, reply ONLY with JSON: "
@@ -167,7 +180,7 @@ def call_follower_eval(prompt_text: str, frame_path: str) -> dict:
     messages = [{"role": "user", "content": [
         {"type": "text", "text": filled},
         _image_content(frame_path)]}]
-    content = _chat("FOLLOWER", messages, "call_follower_eval",
+    content = _chat("PILOT", messages, "call_pilot_eval",
                     _hash(filled), max_tokens=128)
     try:
         out = _parse_json(content)
@@ -180,7 +193,7 @@ def call_follower_eval(prompt_text: str, frame_path: str) -> dict:
     return out
 
 
-def call_leader(prompt_text: str, frame, options: list[str], brief: str) -> dict:
+def call_planner(prompt_text: str, frame, options: list[str], brief: str) -> dict:
     """Returns {"pick": str, "why": str, "brief_update": str}."""
     user = (f"Current strategy brief:\n{brief}\n\n"
             f"Level-up options (top to bottom): {json.dumps(options)}\n"
@@ -188,7 +201,7 @@ def call_leader(prompt_text: str, frame, options: list[str], brief: str) -> dict
     # DeepSeek V4 Flash is deliberately used as a text-only strategic model.
     # OCR has already supplied the level-up options, so a frame is unnecessary.
     messages = [{"role": "user", "content": prompt_text + "\n\n" + user}]
-    content = _chat("LEADER", messages, "call_leader",
+    content = _chat("PLANNER", messages, "call_planner",
                     _hash(prompt_text + user), max_tokens=400)
     out = _parse_json(content)
     return {"pick": out.get("pick", options[0] if options else ""),
@@ -271,3 +284,4 @@ def export_gallery_frames(run_dir: str, error: dict, out_dir: str):
             "source_run": run_dir,
         })
     json.dump(labels, open(labels_path, "w"), indent=2)
+

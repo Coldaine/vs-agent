@@ -9,21 +9,21 @@ only where needed; this is not a second authority stack.
 Paths below are relative to `sideInspiration/` (run commands from that folder).
 
 ---
-# Vampire Survivors Leader–Follower Agent Harness
+# Vampire Survivors planner–pilot Agent Harness
 
 Live (or simulated) agent harness for Vampire Survivors:
 
 - **Perception**: SAM 3.1 concept masks → **threat union** (no track IDs), with a mock/sim backend for development
 - **Pluggable movers**: `free_space_corridor`, `sector_density`, `potential_field`, `fast_vlm`
 - **Commit / breakout wrapper**: momentum + power-through when escape is impossible
-- **Strategy leader**: OpenAI-compatible endpoint for level-up / intent packets
+- **Strategy planner**: OpenAI-compatible endpoint for level-up / intent packets
 - **Traces + bakeoff**: compare approaches empirically
 
 ## Host assumptions (RTX 5090 machine)
 
 1. Vampire Survivors via Steam, **windowed / borderless** (not exclusive fullscreen)
 2. Local GPU for SAM 3.1 (`perception.backend: sam3`) when available
-3. OpenAI-compatible API for the leader (and optional `fast_vlm`):
+3. OpenAI-compatible API for the planner (and optional `fast_vlm`):
 
 ```bash
 export VS_OPENAI_BASE_URL="https://api.openai.com/v1"   # or your endpoint
@@ -52,7 +52,7 @@ pip install -e ".[dev]"
 ## Quick start (simulator — no game required)
 
 ```bash
-# Classic plan path: ~2 Hz VLM follower + slow leader
+# Classic plan path: ~2 Hz VLM pilot + slow planner
 python3 -m vs_harness.cli run --config configs/vlm_follower.yaml --seconds 20
 
 # Perception-mover path (free-space / sectors / potential field)
@@ -68,7 +68,7 @@ python3 -m vs_harness.host_check --config configs/default.yaml
 
 1. Live mode is disabled in `sideInspiration/` — keep `loop.mode: sim` here.
    Adopt through `spine/` before any real-window control.
-2. Classic plan config: `configs/vlm_follower.yaml` (`follower_hz: 2`, OpenAI-compatible follower + leader)
+2. Classic plan config: `configs/vlm_follower.yaml` (`follower_hz: 2`, OpenAI-compatible pilot + planner)
 3. Or perception path: `perception.backend: sam3` / `yolo_world` with `host.capture_backend: mss`
 4. Auto launch/attach via Steam app id `1794680` (or `host.launch_command`)
 5. Kill switch: **F8**
@@ -106,9 +106,10 @@ python3 -m vs_harness.bakeoff.perception_runner --config configs/perception_bake
 
 **Fast mover VLMs (bias / control — not sole dodge brain):** SmolVLM2 500M/256M locally via OpenAI-compatible server; MiniCPM-o; Moondream2. Remote `gpt-4o-mini` stays a slow control. Recent game-agent work shows tiny specialized controllers beat giant VLMs when latency dominates; slow→fast bridges help only if the slow model already beats fast-only.
 
-**Slow leader:** Qwen2.5-VL / GPT-4o on paused level-ups (latency OK).
+**Slow planner:** Qwen2.5-VL / GPT-4o on paused level-ups (latency OK).
 
 **Suggested 5090 bakeoff order:** `yolo_world` vs `sam3` vs `fusion_yolo_flow` (IoU + survive time), then movers with the winning perception; try local SmolVLM2 only as `fast_vlm` bias.
 
 Context7 MCP was unavailable here — SAM / OpenAI-compatible APIs taken from public Meta/GitHub/Ultralytics docs.
+
 

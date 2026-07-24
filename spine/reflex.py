@@ -1,8 +1,8 @@
 """reflex.py — deterministic safety floor. Pure code, no model calls.
 
-Authority: VETO ONLY. It may reject the follower's proposed direction
+Authority: VETO ONLY. It may reject the pilot's proposed direction
 and substitute an escape vector. It may not pursue goals (no gem
-chasing) — goal-seeking stays with the follower so the corpus teaches
+chasing) — goal-seeking stays with the pilot so the corpus teaches
 one coherent policy (docs/why.md §2).
 
 All thresholds come from config.yaml so Loop C can hill-climb them.
@@ -111,3 +111,4 @@ def veto_check(proposed: str, dets: list[Detection], player: Detection,
         if dot > 0.5:  # within ~60 deg cone ahead
             return True
     return False
+

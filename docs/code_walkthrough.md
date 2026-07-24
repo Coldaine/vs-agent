@@ -36,14 +36,14 @@ be able to say why its justification no longer holds — otherwise don't.
   exists. Acting on it is worse than acting on reflex alone.
 - Stale fallback = escape-if-threatened else KEEP CURRENT HEADING:
   keeps the agent moving (doctrine §3.1) without inventing goals.
-  Goal-seeking is the follower's job even in degradation (why.md §2).
+  Goal-seeking is the pilot's job even in degradation (why.md §2).
 - Dither suppression applies only to REVERSALS (dot < 0) and only on
   clean rules: a veto-driven reversal is new information and must
   never be suppressed — suppressing it would countermand the veto.
 - Veto precedes staleness in the tick: a fresh-but-deadly proposal is
   worse than a stale one; order encodes the priority.
-- `submit_follower_proposal` returns False on out-of-vocab output:
-  protocol violations are data (they measure follower prompt drift),
+- `submit_pilot_proposal` returns False on out-of-vocab output:
+  protocol violations are data (they measure pilot prompt drift),
   so they're logged, not silently coerced.
 - neutralize() exists separately from tick logic so run.py's finally
   block can call it without knowing controller state.
@@ -59,20 +59,20 @@ be able to say why its justification no longer holds — otherwise don't.
 
 ## run.py — the episode
 
-- Follower on a daemon THREAD, controller on the main thread: the VLM
+- pilot on a daemon THREAD, controller on the main thread: the VLM
   is async by design (controller.md). Daemon so a hung endpoint can't
   block shutdown. The finally block owns neutralize — every exit path,
   including exceptions and KeyboardInterrupt.
 - `shared = {"brief": ...}` mutable cell: thread closures capture
   values, not variables — a plain `brief` string would freeze the
-  follower's brief at episode start, severing the leader→follower
+  pilot's brief at episode start, severing the planner→pilot
   channel. (Audit bug #1.)
 - Level-up check BEFORE movement: the game pauses on level-up, so
-  movement keys during the menu are garbage input; and the leader's
+  movement keys during the menu are garbage input; and the planner's
   pick is the highest-value decision in the run.
 - `select_option` navigates by INDEX (down-arrow xN + confirm), not
   pixel clicks: menu layout is stable, pixel coordinates are not.
-- Invalid-on-p95>800ms: a slow follower makes the episode useless as
+- Invalid-on-p95>800ms: a slow pilot makes the episode useless as
   eval evidence but still useful as corpus — hence marked, not deleted.
 - prompt_hashes in outcome.json: every score attributable to exact
   prompt versions — the audit trail for KEEP/REVERT.
@@ -123,7 +123,7 @@ be able to say why its justification no longer holds — otherwise don't.
   sleeps are how menu macros desync overnight; escalating with a
   screenshot (status/stuck.png) turns a stalled night into a 2-minute
   human fix in the morning.
-- Phantom-pick guard in select_option (idx=0 fallback): the leader
+- Phantom-pick guard in select_option (idx=0 fallback): the planner
   WILL eventually name an option that doesn't exist; crashing the run
   over it wastes an episode, taking the first option loses one pick.
 
@@ -141,3 +141,4 @@ io_adapter, model_client, perceive raise instead of returning stubs:
 a stub that returns plausible-looking garbage would let the system
 "run" while producing silently meaningless traces. Failing loud at
 the seam is the entire point of the seam.
+

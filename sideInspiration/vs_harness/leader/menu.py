@@ -6,11 +6,11 @@ from typing import Any
 import numpy as np
 
 from vs_harness.control.input_injector import InputInjector
-from vs_harness.leader.strategy import StrategyLeader
+from vs_harness.planner.strategy import StrategyLeader
 from vs_harness.types import ScreenMode
 
 
-# Placeholder option labels when OCR is unavailable — leader still ranks by knowledge.
+# Placeholder option labels when OCR is unavailable — planner still ranks by knowledge.
 DEFAULT_LEVELUP_OPTIONS = ["Weapon A", "Passive B", "Evolution C"]
 
 
@@ -27,7 +27,7 @@ def extract_levelup_options(frame_bgr: np.ndarray | None) -> list[str]:
 def handle_paused_ui(
     mode: ScreenMode,
     frame_bgr: np.ndarray | None,
-    leader: StrategyLeader,
+    planner: StrategyLeader,
     injector: InputInjector,
     now_s: float,
 ) -> dict[str, Any]:
@@ -38,9 +38,9 @@ def handle_paused_ui(
             "(no OCR/VLM option extraction; would always pick index 0). "
             "Use sim mode, or adopt menu selection through spine."
         )
-    intent = leader.maybe_refresh(mode, frame_bgr, now_s)
+    intent = planner.maybe_refresh(mode, frame_bgr, now_s)
     options = extract_levelup_options(frame_bgr)
-    choice = leader.choose_levelup_option(options)
+    choice = planner.choose_levelup_option(options)
     # Navigate: assume leftmost selected; move right `choice` times, then confirm
     injector.release_all()
     time.sleep(0.05)
@@ -69,3 +69,4 @@ def _tap_confirm(injector: InputInjector) -> None:
         ctrl.release(Key.enter)
     except Exception:
         injector.tap("e")
+
