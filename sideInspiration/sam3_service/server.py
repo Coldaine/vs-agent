@@ -1,18 +1,10 @@
-"""Minimal GPU HTTP service for SAM 3 image concept segmentation.
-
-Exposes per-frame text→mask PCS. This is the API that fits Vampire Survivors
-threat-union perception (discard instance IDs every frame).
-
-Note on versions:
-  - Image PCS uses build_sam3_image_model(), which loads facebook/sam3 (sam3.pt).
-  - Meta's SAM 3.1 multiplex checkpoints are for the *video* predictor path.
-  - We still pin the latest facebookresearch/sam3 package in the image; call this
-    service "sam3" for honesty. Env SAM3_VERSION is reserved for future wiring.
-"""
+"""Minimal GPU HTTP service for SAM 3 image concept segmentation."""
 
 from __future__ import annotations
 
 import base64
+import binascii
+import contextlib
 import logging
 import os
 import threading
@@ -31,16 +23,18 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 app = FastAPI(title="sam3-image-pcs", version="0.1.0")
 
 _lock = threading.Lock()
+_inference_lock = threading.Lock()
 _processor = None
 _model = None
 _load_error: str | None = None
+_inference_dtype = None
 
 
 class SegmentRequest(BaseModel):
     image_b64: str = Field(..., description="JPEG/PNG bytes, base64-encoded")
     prompts: list[str] = Field(..., min_length=1)
     score_thresh: float = 0.5
-    downsample_max_side: int = 640
+    downsample_max_side: int = Field(640, gt=0)
 
 
 class SegmentResponse(BaseModel):
@@ -55,7 +49,10 @@ class SegmentResponse(BaseModel):
 
 
 def _decode_image(image_b64: str) -> np.ndarray:
-    raw = base64.b64decode(image_b64)
+    try:
+        raw = base64.b64decode(image_b64, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="Invalid image_b64") from exc
     arr = np.frombuffer(raw, dtype=np.uint8)
     bgr = cv2.imdecode(arr, cv2.IMREAD_COLOR)
     if bgr is None:
@@ -64,7 +61,7 @@ def _decode_image(image_b64: str) -> np.ndarray:
 
 
 def _encode_mask_png(mask: np.ndarray) -> str:
-    u8 = (mask.astype(np.uint8) * 255)
+    u8 = mask.astype(np.uint8) * 255
     ok, buf = cv2.imencode(".png", u8)
     if not ok:
         raise HTTPException(status_code=500, detail="mask encode failed")
@@ -85,15 +82,18 @@ def _resize(frame_bgr: np.ndarray, max_side: int) -> tuple[np.ndarray, float]:
     return frame_bgr, scale
 
 
-def _ensure_model() -> Any:
-    global _processor, _model, _load_error
+def _ensure_model(retry: bool = False) -> Any:
+    global _processor, _model, _load_error, _inference_dtype
     if _processor is not None:
         return _processor
+    if _load_error is not None and not retry:
+        raise HTTPException(status_code=503, detail=_load_error)
 
     with _lock:
         if _processor is not None:
             return _processor
-        # Allow retry after image rebuild / deps fix (do not sticky-fail forever)
+        if _load_error is not None and not retry:
+            raise HTTPException(status_code=503, detail=_load_error)
         _load_error = None
         try:
             import torch
@@ -101,15 +101,24 @@ def _ensure_model() -> Any:
             from sam3.model.sam3_image_processor import Sam3Processor
 
             device = "cuda" if torch.cuda.is_available() else "cpu"
-            logger.info("Loading SAM 3 image model on %s (HF_HOME=%s)", device, os.environ.get("HF_HOME"))
-            # Image builder hardcodes facebook/sam3 checkpoint download when load_from_HF=True.
-            # SAM3 fused kernels cast activations to bf16; keep weights in bf16 too (5090).
+            logger.info(
+                "Loading SAM 3 image model on %s (HF_HOME=%s)",
+                device,
+                os.environ.get("HF_HOME"),
+            )
             _model = build_sam3_image_model(device=device, load_from_HF=True)
             if device == "cuda":
-                _model = _model.to(device=device, dtype=torch.bfloat16)
+                try:
+                    bf16_supported = bool(torch.cuda.is_bf16_supported())
+                except (AttributeError, TypeError):
+                    bf16_supported = False
+                _inference_dtype = torch.bfloat16 if bf16_supported else torch.float16
+                _model = _model.to(device=device, dtype=_inference_dtype)
+            else:
+                _inference_dtype = None
             _model.eval()
             _processor = Sam3Processor(_model, confidence_threshold=0.5)
-            logger.info("SAM 3 image model ready (dtype=%s)", next(_model.parameters()).dtype)
+            logger.info("SAM 3 image model ready (dtype=%s)", _inference_dtype)
             return _processor
         except Exception as exc:  # noqa: BLE001
             _load_error = (
@@ -125,14 +134,11 @@ def _segment_prompts(
 ) -> tuple[np.ndarray, dict[str, np.ndarray], dict[str, int]]:
     import torch
 
-    # Model weights are bf16 on CUDA; autocast casts float image tensors to match.
-    amp_ctx = (
-        torch.autocast(device_type="cuda", dtype=torch.bfloat16)
-        if torch.cuda.is_available()
-        else torch.autocast(device_type="cpu", enabled=False)
-    )
+    amp_ctx = contextlib.nullcontext()
+    if torch.cuda.is_available() and _inference_dtype is not None:
+        amp_ctx = torch.autocast(device_type="cuda", dtype=_inference_dtype)
+
     with torch.inference_mode(), amp_ctx:
-        # set_image once per frame, then prompt — avoids re-encoding the vision tower per string
         state = processor.set_image(pil)
         if hasattr(processor, "confidence_threshold"):
             processor.confidence_threshold = score_thresh
@@ -149,11 +155,10 @@ def _segment_prompts(
                 if masks is None:
                     counts[prompt] = 0
                 else:
-                    arr = masks
-                    if hasattr(arr, "detach"):
-                        arr = arr.detach().float().cpu().numpy()
+                    if hasattr(masks, "detach"):
+                        arr = masks.detach().float().cpu().numpy()
                     else:
-                        arr = np.asarray(arr)
+                        arr = np.asarray(masks)
                     if arr.ndim == 4:
                         arr = arr[:, 0]
                     if arr.ndim == 3:
@@ -178,11 +183,14 @@ def health() -> dict[str, Any]:
 
     return {
         "ok": True,
+        "ready": _processor is not None and _load_error is None,
         "cuda": bool(torch.cuda.is_available()),
         "device_count": int(torch.cuda.device_count()) if torch.cuda.is_available() else 0,
         "model_loaded": _processor is not None,
         "load_error": _load_error,
-        "hf_token_set": bool(os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN")),
+        "hf_token_set": bool(
+            os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN")
+        ),
     }
 
 
@@ -196,18 +204,20 @@ def segment(req: SegmentRequest) -> SegmentResponse:
     rgb = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
     pil = Image.fromarray(rgb)
 
-    union_small, per_small, counts = _segment_prompts(
-        processor, pil, req.prompts, req.score_thresh
-    )
+    with _inference_lock:
+        union_small, per_small, counts = _segment_prompts(
+            processor, pil, req.prompts, req.score_thresh
+        )
 
-    def up(m: np.ndarray) -> np.ndarray:
-        if m.shape == (oh, ow):
-            return m
-        return cv2.resize(m.astype(np.uint8), (ow, oh), interpolation=cv2.INTER_NEAREST).astype(bool)
+    def up(mask: np.ndarray) -> np.ndarray:
+        if mask.shape == (oh, ow):
+            return mask
+        return cv2.resize(
+            mask.astype(np.uint8), (ow, oh), interpolation=cv2.INTER_NEAREST
+        ).astype(bool)
 
     union = up(union_small)
-    per_png = {p: _encode_mask_png(up(m)) for p, m in per_small.items()}
-
+    per_png = {prompt: _encode_mask_png(up(mask)) for prompt, mask in per_small.items()}
     ms = (time.perf_counter() - t0) * 1000
     return SegmentResponse(
         width=ow,
@@ -221,5 +231,5 @@ def segment(req: SegmentRequest) -> SegmentResponse:
 
 @app.post("/v1/warmup")
 def warmup() -> dict[str, Any]:
-    _ensure_model()
+    _ensure_model(retry=True)
     return {"ok": True, "model_loaded": True}

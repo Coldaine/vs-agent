@@ -53,16 +53,24 @@ function Assert-HfToken {
 }
 
 function Invoke-ComposeWithToken([string[]]$ComposeArgs) {
-  # Map Doppler name → HF client env for this process tree only (no print).
-  $joined = ($ComposeArgs | ForEach-Object { if ($_ -match '\s') { "'$_'" } else { $_ } }) -join ' '
-  doppler run -p $DopplerProject -c $DopplerConfig -- powershell -NoProfile -Command @"
-`$env:HF_TOKEN = `$env:HUGGINGFACE_TOKEN
-`$env:HUGGING_FACE_HUB_TOKEN = `$env:HUGGINGFACE_TOKEN
-`$env:HUGGINGFACE_TOKEN = `$env:HUGGINGFACE_TOKEN
-docker compose $joined
-if (`$LASTEXITCODE -ne 0) { exit `$LASTEXITCODE }
-"@
-  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+  # Map Doppler name -> HF client env for this process tree only (no print).
+  # Pass compose argv through an environment variable so PowerShell never
+  # reparses a joined command string.
+  $env:VS_SAM3_COMPOSE_ARGS = $ComposeArgs | ConvertTo-Json -Compress
+  try {
+    $script = @'
+$composeArgs = @($env:VS_SAM3_COMPOSE_ARGS | ConvertFrom-Json)
+$env:HF_TOKEN = $env:HUGGINGFACE_TOKEN
+$env:HUGGING_FACE_HUB_TOKEN = $env:HUGGINGFACE_TOKEN
+$env:HUGGINGFACE_TOKEN = $env:HUGGINGFACE_TOKEN
+& docker compose @composeArgs
+exit $LASTEXITCODE
+'@
+    doppler run -p $DopplerProject -c $DopplerConfig -- powershell -NoProfile -Command $script
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+  } finally {
+    Remove-Item Env:VS_SAM3_COMPOSE_ARGS -ErrorAction SilentlyContinue
+  }
 }
 
 function Get-Health {

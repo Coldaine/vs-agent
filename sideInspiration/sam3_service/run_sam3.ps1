@@ -1,3 +1,8 @@
-# Compatibility wrapper — prefer .\sam3.ps1 <up|down|status|warmup|...>
-# Usage: powershell -NoProfile -File sideInspiration/sam3_service/run_sam3.ps1
-& "$PSScriptRoot\sam3.ps1" up @args
+# Compatibility wrapper - prefer .\sam3.ps1 <up|down|status|warmup|...>
+# No arguments keeps the historical startup behavior; supplied actions are forwarded.
+if ($args.Count -eq 0) {
+  & "$PSScriptRoot\sam3.ps1" up
+} else {
+  & "$PSScriptRoot\sam3.ps1" @args
+}
+exit $LASTEXITCODE

@@ -214,6 +214,7 @@ def run_episode(
     finally:
         injector.release_all()
         capture.close()
+        perception.close()
         if kill is not None:
             kill.stop()
 
