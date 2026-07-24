@@ -18,10 +18,3 @@ failures.jsonl
 theories.jsonl
 loop_p_results.jsonl
 experiments.log
-# --- vs_harness (cloud rescue) ---
-runs/
-*.jsonl
-.pytest_cache/
-__pycache__/
-*.egg-info/
-.venv-harness/

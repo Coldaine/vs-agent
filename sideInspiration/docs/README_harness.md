@@ -1,21 +1,12 @@
 # Cloud harness package (`vs_harness/`)
 
-This tree was rescued from the orphaned Cursor cloud agent
+Rescued from the orphaned Cursor cloud agent
 [Vampire survivor AI harness](https://cursor.com/agents/bc-019f8ec1-f963-71e7-88f1-321413d4c567)
-(branch `cursor/vs-agent-harness-c567`) and landed **beside** the existing
-`spine/` system — not as a replacement.
+(branch `cursor/vs-agent-harness-c567`) and parked under `sideInspiration/`
+for review. See the parent [`README.md`](../README.md) — adopt into `spine/`
+only where needed; this is not a second authority stack.
 
-| Path | Role |
-|---|---|
-| `spine/` | Original gate-driven builder loop (HANDOFF.md / GOAL.md authority) |
-| `vs_harness/` | Parallel leader–follower harness: SAM/YOLO perception, pluggable movers, bakeoff, traces |
-| `configs/` | Harness YAML configs |
-| `docs/vs_harness.md` | Full harness README |
-| `docs/plans/vs_agent_harness_cloud.plan.md` | Cloud agent plan artifact |
-| `requirements-harness.txt` / `pyproject.toml` | Harness install surface (`pip install -e ".[dev]"`) |
-
-Do not collapse these into one stack without an explicit design decision.
-The spine contracts in HANDOFF.md still apply to `spine/` work.
+Paths below are relative to `sideInspiration/` (run commands from that folder).
 
 ---
 # Vampire Survivors Leader–Follower Agent Harness
