@@ -136,9 +136,9 @@ def try_build_sam(cfg: dict[str, Any]) -> PerceptionBackend | None:
             r = c.get(f"{base_url}/health")
             r.raise_for_status()
             body = r.json()
-            if body.get("load_error"):
-                return None
-            if not body.get("ready", body.get("model_loaded", False)):
+            if body.get("load_error") or not body.get(
+                "ready", body.get("model_loaded", False)
+            ):
                 warmup_timeout = float(perc.get("sam3_warmup_timeout_s", 900.0))
                 with httpx.Client(timeout=warmup_timeout) as warmup_client:
                     warmup = warmup_client.post(f"{base_url}/v1/warmup")
