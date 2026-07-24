@@ -17,19 +17,28 @@ Context7 checked: `/facebookresearch/sam3` — image PCS example + `build_sam3_i
 
 1. Docker Desktop with NVIDIA runtime (`docker info` should list `nvidia`).
 2. Accept model access: https://huggingface.co/facebook/sam3
-3. Export a token: `HF_TOKEN=hf_...`
+3. Doppler `ai-automation` / `dev` has `HUGGINGFACE_TOKEN` (injected by `sam3.ps1`)
 
-## Run
+## Durable control script
 
-```bash
+Use [`sam3.ps1`](sam3.ps1) for day-to-day up/down (no secrets printed):
+
+```powershell
 cd sideInspiration/sam3_service
-# PowerShell: $env:HF_TOKEN = "hf_..."
-docker compose up --build -d
-curl http://127.0.0.1:8090/health
-curl -X POST http://127.0.0.1:8090/v1/warmup
+.\sam3.ps1 up        # build if needed, start detached (Doppler → HF_TOKEN)
+.\sam3.ps1 warmup    # load facebook/sam3 into GPU (first time downloads weights)
+.\sam3.ps1 status    # compose ps + /health
+.\sam3.ps1 logs      # follow logs
+.\sam3.ps1 down      # stop container (keeps HF weight volume)
+.\sam3.ps1 restart
+.\sam3.ps1 rebuild   # --no-cache image rebuild
 ```
 
-First warmup downloads weights into the `sam3-hf-cache` volume.
+`run_sam3.ps1` remains as a thin alias for `.\sam3.ps1 up`.
+
+Do not put tokens in committed `.env` files — use Doppler.
+
+Harness config: `configs/sam3_docker.yaml` (`perception.backend: sam3`).
 
 ## API
 

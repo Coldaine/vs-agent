@@ -89,12 +89,12 @@ def _ensure_model() -> Any:
     global _processor, _model, _load_error
     if _processor is not None:
         return _processor
-    if _load_error is not None:
-        raise HTTPException(status_code=503, detail=_load_error)
 
     with _lock:
         if _processor is not None:
             return _processor
+        # Allow retry after image rebuild / deps fix (do not sticky-fail forever)
+        _load_error = None
         try:
             import torch
             from sam3.model_builder import build_sam3_image_model
@@ -103,9 +103,13 @@ def _ensure_model() -> Any:
             device = "cuda" if torch.cuda.is_available() else "cpu"
             logger.info("Loading SAM 3 image model on %s (HF_HOME=%s)", device, os.environ.get("HF_HOME"))
             # Image builder hardcodes facebook/sam3 checkpoint download when load_from_HF=True.
+            # SAM3 fused kernels cast activations to bf16; keep weights in bf16 too (5090).
             _model = build_sam3_image_model(device=device, load_from_HF=True)
+            if device == "cuda":
+                _model = _model.to(device=device, dtype=torch.bfloat16)
+            _model.eval()
             _processor = Sam3Processor(_model, confidence_threshold=0.5)
-            logger.info("SAM 3 image model ready")
+            logger.info("SAM 3 image model ready (dtype=%s)", next(_model.parameters()).dtype)
             return _processor
         except Exception as exc:  # noqa: BLE001
             _load_error = (
@@ -119,42 +123,53 @@ def _ensure_model() -> Any:
 def _segment_prompts(
     processor: Any, pil: Image.Image, prompts: list[str], score_thresh: float
 ) -> tuple[np.ndarray, dict[str, np.ndarray], dict[str, int]]:
-    # set_image once per frame, then prompt — avoids re-encoding the vision tower per string
-    state = processor.set_image(pil)
-    if hasattr(processor, "confidence_threshold"):
-        processor.confidence_threshold = score_thresh
+    import torch
 
-    w, h = pil.size
-    union = np.zeros((h, w), dtype=bool)
-    per_prompt: dict[str, np.ndarray] = {}
-    counts: dict[str, int] = {}
-    for prompt in prompts:
-        mask = np.zeros((h, w), dtype=bool)
-        try:
-            output = processor.set_text_prompt(state=state, prompt=prompt)
-            masks = output.get("masks")
-            if masks is None:
-                counts[prompt] = 0
-            else:
-                arr = np.asarray(masks)
-                if hasattr(arr, "detach"):
-                    arr = arr.detach().cpu().numpy()
-                if arr.ndim == 4:
-                    arr = arr[:, 0]
-                if arr.ndim == 3:
-                    counts[prompt] = int(arr.shape[0])
-                    mask = arr.astype(bool).any(axis=0)
-                elif arr.ndim == 2:
-                    counts[prompt] = 1
-                    mask = arr.astype(bool)
-                else:
+    # Model weights are bf16 on CUDA; autocast casts float image tensors to match.
+    amp_ctx = (
+        torch.autocast(device_type="cuda", dtype=torch.bfloat16)
+        if torch.cuda.is_available()
+        else torch.autocast(device_type="cpu", enabled=False)
+    )
+    with torch.inference_mode(), amp_ctx:
+        # set_image once per frame, then prompt — avoids re-encoding the vision tower per string
+        state = processor.set_image(pil)
+        if hasattr(processor, "confidence_threshold"):
+            processor.confidence_threshold = score_thresh
+
+        w, h = pil.size
+        union = np.zeros((h, w), dtype=bool)
+        per_prompt: dict[str, np.ndarray] = {}
+        counts: dict[str, int] = {}
+        for prompt in prompts:
+            mask = np.zeros((h, w), dtype=bool)
+            try:
+                output = processor.set_text_prompt(state=state, prompt=prompt)
+                masks = output.get("masks")
+                if masks is None:
                     counts[prompt] = 0
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("prompt %r failed: %s", prompt, exc)
-            counts[prompt] = 0
-        per_prompt[prompt] = mask
-        union |= mask
-    return union, per_prompt, counts
+                else:
+                    arr = masks
+                    if hasattr(arr, "detach"):
+                        arr = arr.detach().float().cpu().numpy()
+                    else:
+                        arr = np.asarray(arr)
+                    if arr.ndim == 4:
+                        arr = arr[:, 0]
+                    if arr.ndim == 3:
+                        counts[prompt] = int(arr.shape[0])
+                        mask = arr.astype(bool).any(axis=0)
+                    elif arr.ndim == 2:
+                        counts[prompt] = 1
+                        mask = arr.astype(bool)
+                    else:
+                        counts[prompt] = 0
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("prompt %r failed: %s", prompt, exc)
+                counts[prompt] = 0
+            per_prompt[prompt] = mask
+            union |= mask
+        return union, per_prompt, counts
 
 
 @app.get("/health")
