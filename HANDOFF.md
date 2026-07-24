@@ -80,3 +80,8 @@ commit message.
   then halt. Never improvise around capture/input failures.
 - Need the human (rare): status/HUMAN_NEEDED.md with exact
   instructions, then continue anything not blocked on it.
+
+## Sibling package (cloud rescue)
+
+A parallel harness from an orphaned Cursor cloud agent lives in `vs_harness/`.
+See `docs/vs_harness.md`. It does not replace `spine/` or change gate order.

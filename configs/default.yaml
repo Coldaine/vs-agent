@@ -1,0 +1,72 @@
+# Vampire Survivors harness defaults (host: RTX 5090 + windowed Steam)
+host:
+  # Exact or substring window title for capture / focus
+  window_title: "Vampire Survivors"
+  # Prefer windowed / borderless windowed; exclusive fullscreen breaks capture
+  prefer_windowed: true
+  capture_backend: auto  # auto | mss | dxcam | mock
+  target_fps: 30
+  kill_switch_key: "F8"
+  steam_app_id: "1794680"
+  # Optional shell command if Steam URL protocol is unavailable:
+  # launch_command: "steam steam://run/1794680"
+  launch_wait_s: 8.0
+
+openai:
+  # OpenAI-compatible endpoint for leader (+ optional fast_vlm mover)
+  base_url: "${VS_OPENAI_BASE_URL:-https://api.openai.com/v1}"
+  api_key_env: "VS_OPENAI_API_KEY"
+  leader_model: "${VS_LEADER_MODEL:-gpt-4o}"
+  # Fast-VLM mover model; prefer a local OpenAI-compatible SmolVLM2/MiniCPM endpoint on the 5090
+  follower_model: "${VS_FOLLOWER_MODEL:-gpt-4o-mini}"
+  timeout_s: 30.0
+  # See configs/vision_candidates.yaml for model shortlist + roles
+
+perception:
+  # mock | color_heuristic | optical_flow | sam3 | yolo_world | fusion_yolo_flow | fusion_sam_flow
+  backend: mock
+  sam_version: "sam3.1"
+  enemy_prompts: ["enemy", "monster", "bat", "skeleton"]
+  gem_prompts: ["gem", "experience gem"]
+  player_prompts: ["player character"]
+  every_n_frames: 1
+  downsample_max_side: 640
+  contact_dilate_px: 8
+  yolo_model: "yolov8s-world.pt"
+  yolo_conf: 0.15
+  flow_mag_thresh: 2.0
+
+
+mover:
+  approach_id: free_space_corridor  # free_space_corridor | sector_density | potential_field | fast_vlm
+  sector_count: 16
+  gem_weight: 0.35
+  orbit_bias: 0.15  # CW positive
+
+wrapper:
+  enabled: true
+  commit_ms: 220
+  breakout_commit_ms: 450
+  clearance_trap_px: 6.0
+  momentum_weight: 0.4
+  stuck_motion_px: 2.0
+  stuck_frames: 8
+
+leader:
+  enabled: true
+  intent_refresh_s: 15.0
+  knowledge_pack: "configs/evolution_knowledge.yaml"
+
+trace:
+  root: "runs"
+  save_frames: false
+  save_masks_rle: true
+
+loop:
+  mode: sim  # sim | live
+  # perception_mover (SAM/YOLO + classical) | vlm_follower (classic plan path)
+  control_style: perception_mover
+  follower_hz: 0.0          # set 2.0 for classic ~500ms VLM ticks
+  auto_launch: true
+  sim_seconds: 45.0
+  sim_seed: 7
