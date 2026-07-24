@@ -1,0 +1,20 @@
+# --- runtime artifacts (append-only stores; not source) ---
+episodes/
+corpus/
+eval_set/
+status/*.png
+__pycache__/
+*.pyc
+
+# --- virtual environment and credentials ---
+.venv/
+.env
+spine/weights/
+
+# --- append-only logs written at runtime ---
+model_calls.jsonl
+protocol_violations.jsonl
+failures.jsonl
+theories.jsonl
+loop_p_results.jsonl
+experiments.log

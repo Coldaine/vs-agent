@@ -1,0 +1,48 @@
+# spine/config.yaml — controller parameters (Loop C may mutate these)
+tick_hz: 2
+collision_radius_px: 90
+staleness_ms: 800
+dither_ms: 300
+escape_vector_k: 5
+gem_pull_weight: 0.3
+
+# eval conditions (FIXED — never change and compare scores across)
+stage: "Mad Forest"
+character: "Antonio"
+arcanas: false
+
+# perception
+level_up_ocr_trigger: "LEVEL UP"
+death_ocr_triggers: ["YOU DIED", "GAME OVER"]
+run_end_ocr_triggers: ["REAPER", "TIME'S UP"]
+game_process_hint: "VampireSurvivors"
+window_title_hint: "Vampire Survivors"
+steam_app_id: "1794680"
+capture_backend: wgc
+# DXCam output zero is the primary display. This game window runs on output 1.
+capture_output_idx: 1
+capture_min_dimensions: [640, 480]
+tesseract_cmd: "C:/Program Files/Tesseract-OCR/tesseract.exe"
+
+# detector (PROVISIONING — see status/HUMAN_NEEDED.md)
+# Upstream monster_class.pt detects threats only; it does not label gems/elites.
+yolo_weights: "spine/weights/monster_class.pt"
+yolo_conf: 0.25
+# map each model class NAME to a kind the reflex layer understands
+yolo_class_map:
+  monster: enemy
+
+# OCR crop regions [x0, y0, x1, y1] in window pixels (resolution-specific,
+# set once at fixed resolution). null = OCR whole frame / best-effort.
+hud_regions:
+  hp: null
+  level: null
+  timer: null
+  level_up_options: null
+
+# paths
+episodes_dir: "episodes"
+eval_set_dir: "eval_set"
+failures_log: "failures.jsonl"
+theories_log: "theories.jsonl"
+experiments_log: "experiments.log"
