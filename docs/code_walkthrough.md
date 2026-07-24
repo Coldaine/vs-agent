@@ -48,6 +48,15 @@ be able to say why its justification no longer holds — otherwise don't.
 - neutralize() exists separately from tick logic so run.py's finally
   block can call it without knowing controller state.
 
+## io_adapter.py — game I/O
+
+- Virtual gamepad creation is verified by XInput slot enumeration, not a fixed sleep: ViGEm registers asynchronously and Unity/Rewired may cache empty slots if a device appears after launch.
+- The adapter keeps exactly one VX360Gamepad alive for the process and closes it in every termination path; vgamepad/ViGEm objects left alive across crashes can poison later connections.
+- Gamepad updates are wrapped with bounded recreate-on-error; neutralize() never recreates and never raises, preserving the fail-safe contract.
+- If the game is already running before the virtual controller exists, the reliable path is to keep the controller alive and relaunch or return to a state where the game re-enumerates; late XInput devices are not guaranteed to be accepted.
+- Steam Input and extra virtual controller drivers (vJoy, DS4Windows) can claim XInput slot 0 or remap the ViGEm device; disable Steam Input for the game or hide conflicting devices when the virtual pad is not accepted.
+- Default backend is `keyboard` (pydirectinput scancode injection): stable, no driver dependencies, no XInput timing issues. The ViGEm/vgamepad gamepad backend remains in io_adapter.py and should be switched to (`input_backend: gamepad`) when analog-stick precision is required for fine movement control — keyboard is binary (pressed/released) so 8-direction and cannot express partial deflection.
+
 ## run.py — the episode
 
 - Follower on a daemon THREAD, controller on the main thread: the VLM

@@ -112,3 +112,80 @@ doppler run -- python spine/verify_g0.py
 # Step 4: If G0 passes, begin G1 reflex-only
 doppler run -- python spine/run.py --reflex-only
 ```
+
+### Session 3 Updates (2026-07-23)
+
+- **Virtual gamepad lifecycle hardened**: `spine/io_adapter.py` now verifies ViGEm/XInput enumeration by polling XInput slots instead of relying on a fixed sleep, recreates the virtual Xbox 360 controller on bounded input failures, and closes it explicitly from `run.py`, `verify_g0.py`, and the new `spine/verify_gamepad.py` diagnostic.
+- **Config**: replaced `gamepad_ready_delay_s` with `gamepad_ready_timeout_s`, `gamepad_create_retries`, and `gamepad_recreate_on_error`.
+- **Validation**: `python -m compileall spine` passed; `python spine/verify_gamepad.py` returned `{"ok": true, "before": [], "during": [0], "recoveries": 0}`.
+- **Live menu blocker unchanged**: `status/BLOCKED.md` still requires review before further menu input.
+
+## G0 Plumbing Gate — 2026-07-23 23:28:03
+**Verdict:** FAILED
+
+**Results:**
+- launch: PASS
+- capture: PASS
+- keys: PASS
+- menu_macro: PASS
+- move: FAIL (expected one of ['IN_GAME'], got CHARACTER_SELECT: 'ROCKSTAR FAVOURITE MAX WEAPONS POWER CREEP GOLDEN EGGS ENTER CO-OP FILTER: OFF GENNARO BELPAESE FAVOURITE A MAX WEAPONS [6] POWER CREEP EE. GOLDEN EGGS EO” EGGS: 20 SKIN')
+
+**Evidence:**
+- launched_process: False
+- capture_resolution: 2562x1479
+- capture_mean_brightness: 92.93
+- key_diff: 40.6612
+- key_ocr_before: a@ ms . Ss = i" & - ——= = ae Character Selection 7 -. hf a TY, me oer, ] @ = : ah : | 2 «| |) & 2! Bio ¢: » & y Ae i! e' : Pe = = ne I i" 7 _ | Bs y ial 
+- key_ocr_after: GENNARO BELPAESE FAVOURITE - = MAX WEAPONS [6] POWER CREEP ee. Golden Eggs eo” EGGS: 20 SKIN 
+- stage_text: ROCKSTAR » 118891 GENNARO BELPAESE FAVOURITE MAX WEAPONS POWER CREEP GOLDEN EGGS ENTER CO-OP FILTER: OFF GENNARO BELPAESE FAVOURITE - = MAX WEAPONS [6] POWER CREEP EE. GOLDEN EGGS 
+
+## G0 Plumbing Gate — 2026-07-23 23:29:07
+**Verdict:** FAILED
+
+**Results:**
+- launch: PASS
+- capture: PASS
+- keys: PASS
+- menu_macro: FAIL (expected one of ['IN_GAME', 'STAGE_SELECT'], got MAIN_MENU: 'ROCKSTAR &: 118891 (_ MX } CONCEITED WERE THEY THAT RULED FROM SO HIGH YET STOOPED SO LOW. THIS NEXUS OF DEBASED PURITY IS THE PERFECT PLACE TO FIND A VAMPIRE. PROBABLY. IL MOLISE ')
+
+**Evidence:**
+- launched_process: False
+- capture_resolution: 2562x1479
+- capture_mean_brightness: 60.78
+- key_diff: 0.1884
+- key_ocr_before: GENNARO BELPAESE  FAVOURITE - =  MAX WEAPONS [6]  POWER CREEP ee.  Golden Eggs eo”  EGGS: 20  SKIN  ” 
+- key_ocr_after: GENNARO BELPAESE FAVOURITE * MAX WEAPONS =~ [6] = POWER CREEP ee. Golden Eggs eo” EGGS: 20 SKIN 
+
+## G0 Plumbing Gate — 2026-07-23 23:30:04
+**Verdict:** FAILED
+
+**Results:**
+- launch: PASS
+- capture: PASS
+- keys: PASS
+- menu_macro: FAIL (expected one of ['MAIN_MENU'], got UNKNOWN: 'ROCKSTAR @ CA EB “ RN 2 & PA ES) TH 2) E FE BY TE ROCKSTAR |G, 118891) | BACK | — : "FILTER: OFF ’ . 3 IE NE RL ES I A IE A +36% & AY OS A IH A Q 1408 CN, : . EN +21% FAA EE PEE EE')
+
+**Evidence:**
+- launched_process: False
+- capture_resolution: 2562x1479
+- capture_mean_brightness: 73.19
+- key_diff: 9.8272
+- key_ocr_before: Rockstar &: 118891 (_ mx } = a —— i . A : a i Stage Selection | "| pairs saebel: ua Moone __| Conceited were they that ruled from so “~ lel >. alae Snare is high yet stooped so low
+- key_ocr_after: Rockstar &: 118891 (_ mx } = zl E 7 q , re Stage Selection I 5 . Scars; The flowers seem to sing here, calling rr. ‘ at bitten oh out to weary heroes. Is such ‘an unspoilt BJ 73% .
+
+## G0 Plumbing Gate — 2026-07-23 23:31:35
+**Verdict:** FAILED
+
+**Results:**
+- launch: PASS
+- capture: PASS
+- keys: PASS
+- menu_macro: FAIL (expected one of ['STAGE_SELECT'], got CHARACTER_SELECT: 'ROCKSTAR FAVOURITE MAX WEAPONS POWER CREEP GOLDEN EGGS EGGS: 20 SKIN (I ENTER CO-OP | FILTER: OFF GENNARO BELPAESE FAVOURITE = A MAX WEAPONS [6] POWER CREEP EE. GOLDEN EGGS EO” EGG')
+
+**Evidence:**
+- launched_process: False
+- capture_resolution: 2562x1479
+- capture_mean_brightness: 92.87
+- key_diff: 0.911
+- key_ocr_before: a@  ae Character Selection 7  -.  &  me oreres  = ess) (? 1 :  | ry an : ah  ® : . : gy A | 2 Ss Bio ¢: »  Bit | ftw) ¥E 2  a  fe 2S 4) a9  i _ ' a  ms y ial 
+- key_ocr_after: wt  ; ie  ’ ? e +35% oy Sy oS a oF ay +420% ar : Bla oS ol ole & +1 5 3 a - a eZ, ey | a- qi a +50% ' bx 30% a | -  +50% ’ ied +4 re 4 a oI) +10 | comer ser | :  ft a = jo dit 

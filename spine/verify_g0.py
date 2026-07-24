@@ -83,7 +83,7 @@ def verify_g0() -> bool:
                        if name not in results), "unknown")
         results[failed] = f"FAIL ({error})"
     finally:
-        io.neutralize()
+        io.close()
         _append_evidence(results, evidence)
 
     print(json.dumps({"results": results, "evidence": evidence}, indent=2))

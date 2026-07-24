@@ -1,0 +1,35 @@
+# GPU SAM 3 image-PCS sidecar for sideInspiration / future spine adopt.
+#
+# Prerequisites:
+#   - Docker Desktop with NVIDIA runtime (this host has `nvidia` runtime)
+#   - Hugging Face access accepted for https://huggingface.co/facebook/sam3
+#   - HF_TOKEN in env or .env next to this file
+#
+# Usage (from this directory):
+#   docker compose up --build -d
+#   curl http://127.0.0.1:8090/health
+#   curl -X POST http://127.0.0.1:8090/v1/warmup
+
+services:
+  sam3:
+    build: .
+    image: vs-sam3-pcs:local
+    ports:
+      - "8090:8090"
+    environment:
+      HF_TOKEN: ${HF_TOKEN:-}
+      HUGGING_FACE_HUB_TOKEN: ${HF_TOKEN:-}
+      HF_HOME: /models/huggingface
+    volumes:
+      - sam3-hf-cache:/models/huggingface
+    gpus: all
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+volumes:
+  sam3-hf-cache:

@@ -16,6 +16,9 @@ return all inputs to neutral. run.py calls it in every termination path.
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
+import ctypes
+from ctypes import wintypes
+import gc
 import time
 import numpy as np
 
@@ -53,15 +56,60 @@ _DIR_KEYS = {
     "HOLD": (),
 }
 _MENU_KEYS = {"up": "up", "down": "down", "left": "left",
-              "right": "right", "confirm": "enter"}
+               "right": "right", "confirm": "enter", "start": "space"}
+_GAMEPAD_DIRECTIONS = {
+    "N": (0, 32767), "S": (0, -32768), "E": (32767, 0), "W": (-32768, 0),
+    "NE": (23170, 23170), "NW": (-23170, 23170),
+    "SE": (23170, -23170), "SW": (-23170, -23170), "HOLD": (0, 0),
+}
+
+
+class _XINPUT_GAMEPAD(ctypes.Structure):
+    _fields_ = [
+        ("wButtons", wintypes.WORD),
+        ("bLeftTrigger", wintypes.BYTE),
+        ("bRightTrigger", wintypes.BYTE),
+        ("sThumbLX", wintypes.SHORT),
+        ("sThumbLY", wintypes.SHORT),
+        ("sThumbRX", wintypes.SHORT),
+        ("sThumbRY", wintypes.SHORT),
+    ]
+
+
+class _XINPUT_STATE(ctypes.Structure):
+    _fields_ = [("dwPacketNumber", wintypes.DWORD), ("Gamepad", _XINPUT_GAMEPAD)]
+
+
+_XINPUT = None
+
+
+def _xinput():
+    global _XINPUT
+    if _XINPUT is not None:
+        return _XINPUT
+    for name in ("xinput1_4.dll", "xinput1_3.dll", "xinput9_1_0.dll"):
+        try:
+            _XINPUT = ctypes.WinDLL(name)
+            return _XINPUT
+        except OSError:
+            continue
+    raise GamepadUnavailableError("no XInput DLL is available")
+
+
+def _connected_xinput_slots() -> set[int]:
+    xinput = _xinput()
+    state = _XINPUT_STATE()
+    connected = set()
+    for slot in range(4):
+        if xinput.XInputGetState(slot, ctypes.byref(state)) == 0:
+            connected.add(slot)
+    return connected
 
 
 class IOAdapter:
-    """Route A backend: dxcam capture (Desktop Duplication — captures
-    GPU-accelerated game windows without the black-frame problem that
-    kills plain GDI screenshots) + pydirectinput scancode injection
-    (Vampire Survivors is keyboard-navigable). This is the ONLY place
-    dxcam/pydirectinput/pygetwindow may be imported (AGENTS.md)."""
+    """Route A backend: WGC/DXcam capture plus keyboard or ViGEm virtual
+    Xbox 360 input. This is the ONLY place dxcam/pydirectinput/pygetwindow/
+    vgamepad may be imported (AGENTS.md)."""
 
     def __init__(self, backend: str, config: dict):
         self.config = config
@@ -79,10 +127,98 @@ class IOAdapter:
         self._min_capture_width, self._min_capture_height = minimum
         self._capture_retries = int(config.get("capture_retries", 3))
         self._last_img: Optional[np.ndarray] = None
+        self._input_backend = config.get("input_backend", "gamepad")
+        self._gamepad = None
+        self._gamepad_ready_timeout_s = float(config.get(
+            "gamepad_ready_timeout_s", config.get("gamepad_ready_delay_s", 0.75)))
+        self._gamepad_create_retries = int(config.get("gamepad_create_retries", 3))
+        self._gamepad_recreate_on_error = bool(config.get("gamepad_recreate_on_error", True))
+        self._gamepad_recoveries = 0
 
         import pydirectinput
         pydirectinput.PAUSE = 0  # no artificial delay between key events
         self._keys = pydirectinput
+        if self._input_backend == "gamepad":
+            self._create_gamepad()
+
+    def _create_gamepad(self) -> None:
+        import vgamepad as vg
+        self._vg = vg
+        attempts = max(1, self._gamepad_create_retries)
+        timeout_s = max(0.1, self._gamepad_ready_timeout_s)
+        last_error = None
+        for attempt in range(1, attempts + 1):
+            baseline = _connected_xinput_slots()
+            gamepad = None
+            try:
+                gamepad = vg.VX360Gamepad()
+                gamepad.update()
+                deadline = time.monotonic() + timeout_s
+                while time.monotonic() < deadline:
+                    connected = _connected_xinput_slots()
+                    if connected - baseline or (not baseline and connected):
+                        self._gamepad = gamepad
+                        return
+                    time.sleep(0.05)
+                raise GamepadUnavailableError(
+                    "virtual Xbox 360 controller was not enumerated by XInput "
+                    f"within {timeout_s:.2f}s")
+            except Exception as error:
+                last_error = error
+                if gamepad is not None:
+                    try:
+                        gamepad.reset()
+                        gamepad.update()
+                    except Exception:
+                        pass
+                    del gamepad
+                    gc.collect()
+                if attempt < attempts:
+                    time.sleep(0.25 * attempt)
+        raise GamepadUnavailableError(
+            "could not create a ViGEm virtual Xbox 360 controller after "
+            f"{attempts} attempts: {last_error}")
+
+    def _destroy_gamepad(self) -> None:
+        gamepad = self._gamepad
+        self._gamepad = None
+        if gamepad is None:
+            return
+        try:
+            gamepad.reset()
+            gamepad.update()
+        except Exception:
+            pass
+        del gamepad
+        gc.collect()
+
+    def _recover_gamepad(self, error: Exception) -> None:
+        self._destroy_gamepad()
+        self._create_gamepad()
+        self._gamepad_recoveries += 1
+        print(f"[gamepad] recreated after input failure: {error}")
+
+    def _with_gamepad(self, action) -> None:
+        if self._gamepad is None:
+            self._create_gamepad()
+        try:
+            action(self._gamepad)
+            self._gamepad.update()
+        except Exception as error:
+            if not self._gamepad_recreate_on_error:
+                raise
+            self._recover_gamepad(error)
+            action(self._gamepad)
+            self._gamepad.update()
+
+    def _tap_gamepad_button(self, button) -> None:
+        self._with_gamepad(lambda gamepad: gamepad.press_button(button=button))
+        time.sleep(float(self.config.get("gamepad_button_hold_s", 0.3)))
+        self._with_gamepad(lambda gamepad: gamepad.release_button(button=button))
+
+    def close(self) -> None:
+        self.neutralize()
+        self._destroy_gamepad()
 
     # --- capture ---
     def _ensure_camera(self):
@@ -237,10 +373,22 @@ class IOAdapter:
     def hold_direction(self, direction: str) -> None:
         """Begin holding a movement direction. Replaces any prior hold.
         'HOLD' = release movement, keep position."""
+        if self._input_backend == "gamepad":
+            x_value, y_value = _GAMEPAD_DIRECTIONS.get(direction, (0, 0))
+            self._with_gamepad(
+                lambda gamepad: gamepad.left_joystick(
+                    x_value=x_value, y_value=y_value))
+            return
         self._press_keys(_DIR_KEYS.get(direction, ()))
 
     def neutralize(self) -> None:
         """ALL inputs to neutral. Idempotent. Called on every exit path."""
+        if self._gamepad is not None:
+            try:
+                self._gamepad.reset()
+                self._gamepad.update()
+            except Exception:
+                pass
         for k in list(self._held):
             try:
                 self._keys.keyUp(k)
@@ -251,13 +399,41 @@ class IOAdapter:
     def menu_navigate(self, key: str) -> None:
         """Single discrete menu input: 'up'|'down'|'left'|'right'|'confirm'."""
         self._focus()
-        self._keys.press(_MENU_KEYS.get(key, key))
+        if self._input_backend == "gamepad":
+            buttons = {
+                "up": self._vg.XUSB_BUTTON.XUSB_GAMEPAD_DPAD_UP,
+                "down": self._vg.XUSB_BUTTON.XUSB_GAMEPAD_DPAD_DOWN,
+                "left": self._vg.XUSB_BUTTON.XUSB_GAMEPAD_DPAD_LEFT,
+                "right": self._vg.XUSB_BUTTON.XUSB_GAMEPAD_DPAD_RIGHT,
+                "confirm": self._vg.XUSB_BUTTON.XUSB_GAMEPAD_A,
+                "esc": self._vg.XUSB_BUTTON.XUSB_GAMEPAD_B,
+            }
+            button = buttons.get(key)
+            if button is None:
+                raise ValueError(f"unsupported gamepad menu key: {key}")
+            self._tap_gamepad_button(button)
+            return
+        mapped = _MENU_KEYS.get(key, key)
+        # Vampire Survivors ignores zero-duration synthetic menu presses.
+        self._keys.keyDown(mapped)
+        time.sleep(0.12)
+        self._keys.keyUp(mapped)
 
     def click(self, x: int, y: int) -> None:
         self._keys.click(x, y)
 
+    def click_frame(self, x: int, y: int) -> None:
+        """Click WGC frame coordinates using the physical monitor origin."""
+        import ctypes
+
+        origin_x, origin_y = self.config.get("wgc_monitor_origin", [0, 0])
+        user32 = ctypes.windll.user32
+        user32.SetCursorPos(int(origin_x + x), int(origin_y + y))
+        user32.mouse_event(0x0002, 0, 0, 0, 0)
+        user32.mouse_event(0x0004, 0, 0, 0, 0)
+
     # --- perception helpers ---
-    def ocr(self, region: Optional[tuple] = None) -> str:
+    def ocr(self, region: Optional[tuple] = None, ocr_config: str | None = None) -> str:
         import pytesseract
         tesseract_cmd = self.config.get("tesseract_cmd")
         if tesseract_cmd:
@@ -267,7 +443,8 @@ class IOAdapter:
         if region:
             x0, y0, x1, y1 = region
             img = img[y0:y1, x0:x1]
-        return pytesseract.image_to_string(img)
+        config = self.config.get("menu_ocr_config", "") if ocr_config is None else ocr_config
+        return pytesseract.image_to_string(img, config=config)
 
     def list_windows(self) -> list[dict]:
         try:
@@ -281,6 +458,10 @@ class IOAdapter:
     # --- optional frame-step mode (annotation/debug only, never eval) ---
     def pause_process(self) -> None: ...
     def resume_process(self) -> None: ...
+
+
+class GamepadUnavailableError(RuntimeError):
+    pass
 
 
 class BlackFrameError(RuntimeError):

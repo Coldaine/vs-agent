@@ -118,6 +118,7 @@ def run_episode(eval_mode: bool, reflex_only: bool = False, disable_leader: bool
     finally:
         stop.set()
         controller.neutralize()          # every exit path, no exceptions
+        io.close()
         survived = time.monotonic() - start
         p95 = (sorted(latencies)[int(len(latencies) * .95)]
                if latencies else 0)
