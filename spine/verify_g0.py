@@ -30,6 +30,7 @@ def verify_g0():
 
     # 1. Capture Check
     print("[G0] Verifying Capture...")
+    launch.launch_game(cfg, io)
     try:
         f1 = io.screenshot()
         if f1 is None or f1.image is None:

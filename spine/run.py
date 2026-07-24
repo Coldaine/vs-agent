@@ -52,7 +52,7 @@ def run_episode(eval_mode: bool, reflex_only: bool = False, disable_leader: bool
     # mutable cell so the leader's brief_update reaches the follower
     shared = {"brief": "Early game: farm gems near open ground, orbit clockwise."}
     stop = threading.Event()
-    latencies, start = [], time.monotonic()
+    latencies = []
 
     try:
         if not eval_mode: # Manual starts skip launch logic if already in-game? 
@@ -61,6 +61,7 @@ def run_episode(eval_mode: bool, reflex_only: bool = False, disable_leader: bool
         
         launch.to_stage_select(io, cfg)          # launch + menu macro
         launch.start_run(io, cfg)
+        start = time.monotonic()
         
         if not reflex_only:
             fw = threading.Thread(target=follower_loop,
@@ -85,7 +86,7 @@ def run_episode(eval_mode: bool, reflex_only: bool = False, disable_leader: bool
                     launch.select_option(io, pick["pick"], options)
                 else:
                     # Default to option 1 if leader disabled
-                    launch.select_option(io, 1, options)
+                    launch.select_option(io, options[0] if options else "", options)
                 continue
 
             if screen_type in ("DEATH", "RUN_END"):
