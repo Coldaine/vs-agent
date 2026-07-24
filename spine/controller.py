@@ -8,8 +8,8 @@ review/theorist pipeline gets clean attribution.
 from __future__ import annotations
 import time
 from dataclasses import dataclass, field
-from io_adapter import IOAdapter, DIRECTIONS
-import reflex
+DIRECTIONS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW", "HOLD"]
+import spine.reflex as reflex
 
 
 @dataclass
