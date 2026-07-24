@@ -62,6 +62,7 @@ def run_episode(eval_mode: bool, reflex_only: bool = False, disable_leader: bool
         launch.to_stage_select(io, cfg)          # launch + menu macro
         launch.start_run(io, cfg)
         start = time.monotonic()
+        start = time.monotonic()
         
         if not reflex_only:
             fw = threading.Thread(target=follower_loop,
