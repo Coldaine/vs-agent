@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from vs_harness.perception.boxes import boxes_to_mask
 from vs_harness.perception.factory import PERCEPTION_BACKENDS, build_perception
@@ -92,3 +93,18 @@ def test_sam3_http_client_parses_masks(monkeypatch):
     assert out.threat_union[12, 18]
     assert out.meta["transport"] == "http"
     assert out.backend == "sam3"
+
+
+def test_sam3_server_validates_segment_inputs():
+    pytest.importorskip("fastapi")
+
+    from fastapi import HTTPException
+    from pydantic import ValidationError
+
+    from sideInspiration.sam3_service.server import SegmentRequest, _decode_image
+
+    with pytest.raises(ValidationError):
+        SegmentRequest(image_b64="x", prompts=["enemy"], downsample_max_side=0)
+    with pytest.raises(HTTPException) as error:
+        _decode_image("not-base64")
+    assert error.value.status_code == 400

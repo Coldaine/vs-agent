@@ -6,7 +6,7 @@ from typing import Any
 import numpy as np
 
 from vs_harness.control.input_injector import InputInjector
-from vs_harness.planner.strategy import StrategyLeader
+from vs_harness.planner.strategy import StrategyPlanner
 from vs_harness.types import ScreenMode
 
 
@@ -27,7 +27,7 @@ def extract_levelup_options(frame_bgr: np.ndarray | None) -> list[str]:
 def handle_paused_ui(
     mode: ScreenMode,
     frame_bgr: np.ndarray | None,
-    planner: StrategyLeader,
+    planner: StrategyPlanner,
     injector: InputInjector,
     now_s: float,
 ) -> dict[str, Any]:

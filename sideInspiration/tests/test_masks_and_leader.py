@@ -1,6 +1,6 @@
 import numpy as np
 
-from vs_harness.planner.strategy import StrategyLeader
+from vs_harness.planner.strategy import StrategyPlanner
 from vs_harness.perception.masks import decode_rle, encode_rle
 from vs_harness.types import ScreenMode
 
@@ -19,7 +19,7 @@ def test_leader_levelup_ranking(monkeypatch):
         "planner": {"enabled": True, "knowledge_pack": "configs/evolution_knowledge.yaml", "intent_refresh_s": 1},
         "openai": {"base_url": "http://x", "api_key_env": "NOPE", "leader_model": "x"},
     }
-    planner = StrategyLeader(cfg)
+    planner = StrategyPlanner(cfg)
     idx = planner.choose_levelup_option(["Empty Tome", "Garlic", "Stone"])
     assert idx == 0  # Empty Tome enables Magic Wand evolution
     intent = planner.maybe_refresh(ScreenMode.PLAYING, None, now_s=10.0)

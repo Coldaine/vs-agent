@@ -31,7 +31,6 @@ capture_min_dimensions:
 - 640
 - 480
 capture_retries: 3
-key_diff_threshold: 0.02
 movement_diff_threshold: 0.1
 tesseract_cmd: C:/Program Files/Tesseract-OCR/tesseract.exe
 menu_ocr_config: --psm 6
@@ -50,3 +49,6 @@ failures_log: failures.jsonl
 theories_log: theories.jsonl
 experiments_log: experiments.log
 nav_max_turns: 12
+eval_seeds:
+- 1
+- 2

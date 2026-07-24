@@ -53,9 +53,10 @@ def verify_g0() -> bool:
         evidence["keys_probe"] = "responsive"
 
         import nav
-        nav.navigate_to_game(io, cfg)
+        if not nav.navigate_to_game(io, cfg):
+            raise RuntimeError("nav agent finished without proving IN_GAME")
         results["menu_macro"] = "PASS"
-        evidence["nav_status"] = "Nav agent succeeded"
+        evidence["nav_status"] = "Nav agent proved IN_GAME"
 
         start = io.screenshot()
         io.hold_direction("E")

@@ -23,11 +23,11 @@ def probe_health(io, threshold: float = 1.0) -> bool:
         before = io.screenshot().image
         io.menu_navigate("down")
         time.sleep(0.3)
+        moved = io.screenshot().image
+        diff = float(np.mean(np.abs(before.astype(np.int16)
+                                    - moved.astype(np.int16))))
         io.menu_navigate("up")          # restore the original cursor position
         time.sleep(0.3)
-        after = io.screenshot().image
-        diff = float(np.mean(np.abs(before.astype(np.int16)
-                                    - after.astype(np.int16))))
         return diff > threshold
     except Exception as error:
         print(f"[input_health] probe failed: {error}")

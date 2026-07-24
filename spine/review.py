@@ -48,9 +48,13 @@ def assemble_packet(run_dir: str) -> dict:
             ft = json.loads(l).get("dominant_failure_type")
             if ft:
                 histogram[ft] = histogram.get(ft, 0) + 1
+    prompts = {
+        "pilot": open("prompts/pilot.md", encoding="utf-8").read(),
+        "planner": open("prompts/planner.md", encoding="utf-8").read(),
+    }
     return {"states": packet_states, "keyframes": keyframes,
             "outcome": outcome, "histogram": histogram,
-            "directive": generate_directive(states)}
+            "directive": generate_directive(states), "prompts": prompts}
 
 
 def review_run(run_dir: str):
@@ -61,10 +65,13 @@ def review_run(run_dir: str):
 
     autopsy = model_client.call_subagent(
         autopsy_prompt, packet, keyframes=packet["keyframes"])
-    leader_log = [json.loads(l) for l in open(os.path.join(run_dir, "planner.jsonl"))] \
-        if os.path.exists(os.path.join(run_dir, "planner.jsonl")) else []
+    planner_path = os.path.join(run_dir, "planner.jsonl")
+    if not os.path.exists(planner_path):
+        planner_path = os.path.join(run_dir, "leader.jsonl")
+    planner_log = [json.loads(l) for l in open(planner_path)] \
+        if os.path.exists(planner_path) else []
     build = model_client.call_subagent(
-        build_prompt, {"leader_log": leader_log, "outcome": packet["outcome"]})
+        build_prompt, {"planner_log": planner_log, "outcome": packet["outcome"]})
 
     with open("failures.jsonl", "a") as f:
         f.write(json.dumps({"run": run_dir, **autopsy}) + "\n")

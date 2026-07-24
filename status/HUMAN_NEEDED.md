@@ -1,7 +1,7 @@
 # HUMAN_NEEDED — one-time provisioning to start the gates
 
 The BUILDER has filled all three seams and the harness compiles, but
-the live environment needs five things only you can supply. None of
+the live environment needs six things only you can supply. None of
 these are guesses the BUILDER may safely make (secrets, a fixed
 resolution choice, and a trained model file).
 

@@ -19,6 +19,7 @@ from typing import Optional
 import ctypes
 from ctypes import wintypes
 import gc
+import threading
 import time
 import numpy as np
 
@@ -120,6 +121,9 @@ class IOAdapter:
                             or config.get("game_process_hint")
                             or "Vampire Survivors")
         self._held: set[str] = set()
+        self._input_lock = threading.RLock()
+        self._pwm_gen = 0
+        self._pwm_thread: threading.Thread | None = None
         self._camera = None
         self._region: Optional[tuple] = None
         self._capture_output_idx = int(config.get("capture_output_idx", 0))
@@ -134,6 +138,7 @@ class IOAdapter:
         self._gamepad_create_retries = int(config.get("gamepad_create_retries", 3))
         self._gamepad_recreate_on_error = bool(config.get("gamepad_recreate_on_error", True))
         self._gamepad_recoveries = 0
+        self._recovering_gamepad = False
 
         import pydirectinput
         pydirectinput.PAUSE = 0  # no artificial delay between key events
@@ -193,18 +198,26 @@ class IOAdapter:
         gc.collect()
 
     def _recover_gamepad(self, error: Exception) -> None:
-        self._destroy_gamepad()
-        self._create_gamepad()
-        self._gamepad_recoveries += 1
-        print(f"[gamepad] recreated after input failure: {error}")
-        
-        # Probe game response to ensure the new gamepad took a valid slot
+        if self._recovering_gamepad:
+            raise GamepadUnavailableError(
+                f"gamepad recovery failed while probing an existing recovery: {error}"
+            ) from error
+        self._recovering_gamepad = True
         try:
-            import input_health
-            if not input_health.probe_health(self):
-                print("[gamepad] WARNING: Game did not respond to input probe after recovery. May be in a dead slot.")
-        except Exception:
-            pass
+            self._destroy_gamepad()
+            self._create_gamepad()
+            self._gamepad_recoveries += 1
+            print(f"[gamepad] recreated after input failure: {error}")
+
+            # Probe game response to ensure the new gamepad took a valid slot.
+            try:
+                import input_health
+                if not input_health.probe_health(self):
+                    print("[gamepad] WARNING: input probe failed after recovery")
+            except Exception:
+                pass
+        finally:
+            self._recovering_gamepad = False
 
     def _with_gamepad(self, action) -> None:
         if self._gamepad is None:
@@ -362,25 +375,32 @@ class IOAdapter:
                 if attempt < self._capture_retries:
                     time.sleep(0.15)
 
-        if self._last_img is not None:
-            height, width = self._last_img.shape[:2]
-            print(f"[capture] retry exhaustion ({last_error}); using last good frame")
-            return Frame(image=self._last_img, width=width, height=height,
-                         t_capture=time.monotonic())
         raise BlackFrameError(last_error)
 
     # --- input ---
     def _press_keys(self, keys):
-        target = set(keys)
-        for k in self._held - target:
-            self._keys.keyUp(k)
-        for k in target - self._held:
-            self._keys.keyDown(k)
-        self._held = target
+        with self._input_lock:
+            target = set(keys)
+            for k in self._held - target:
+                self._keys.keyUp(k)
+            for k in target - self._held:
+                self._keys.keyDown(k)
+            self._held = target
+
+    def _stop_pwm(self) -> None:
+        with self._input_lock:
+            self._pwm_gen += 1
+            thread = self._pwm_thread
+        if thread is not None and thread is not threading.current_thread():
+            thread.join(timeout=1.0)
+        with self._input_lock:
+            if self._pwm_thread is thread:
+                self._pwm_thread = None
 
     def hold_direction(self, direction: str, speed: float = 1.0) -> None:
         """Begin holding a movement direction at a given duty cycle [0.0, 1.0].
         Replaces any prior hold. 'HOLD' = release movement, keep position."""
+        self._stop_pwm()
         if self._input_backend == "gamepad":
             x_val, y_val = _GAMEPAD_DIRECTIONS.get(direction, (0, 0))
             self._with_gamepad(
@@ -390,9 +410,6 @@ class IOAdapter:
             
         keys = _DIR_KEYS.get(direction, ())
 
-        # Supersede any running PWM thread by bumping the generation id.
-        self._pwm_gen = getattr(self, "_pwm_gen", 0) + 1
-
         if speed >= 0.99 or not keys:
             self._press_keys(keys)
             return
@@ -400,40 +417,48 @@ class IOAdapter:
         # Pulse the keys at duty cycle `speed` on a background thread. The
         # thread runs only while it owns the current generation id, so a
         # newer hold_direction()/neutralize() call cleanly retires it.
-        import threading
-        gen = self._pwm_gen
+        with self._input_lock:
+            gen = self._pwm_gen
         period = 0.1                      # 100 ms duty-cycle window
         on_time = period * speed
         off_time = period - on_time
 
         def pwm_loop():
-            while self._pwm_gen == gen:
+            while True:
+                with self._input_lock:
+                    if self._pwm_gen != gen:
+                        return
                 if on_time > 0:
                     self._press_keys(keys)
                     time.sleep(on_time)
-                if self._pwm_gen != gen:
-                    break
+                with self._input_lock:
+                    if self._pwm_gen != gen:
+                        return
                 if off_time > 0:
                     self._press_keys(())
                     time.sleep(off_time)
 
-        threading.Thread(target=pwm_loop, daemon=True).start()
+        thread = threading.Thread(target=pwm_loop, daemon=True)
+        with self._input_lock:
+            self._pwm_thread = thread
+        thread.start()
 
     def neutralize(self) -> None:
         """ALL inputs to neutral. Idempotent. Called on every exit path."""
-        self._pwm_gen = getattr(self, "_pwm_gen", 0) + 1
+        self._stop_pwm()
         if self._gamepad is not None:
             try:
                 self._gamepad.reset()
                 self._gamepad.update()
             except Exception:
                 pass
-        for k in list(self._held):
-            try:
-                self._keys.keyUp(k)
-            except Exception:
-                pass
-        self._held = set()
+        with self._input_lock:
+            for k in list(self._held):
+                try:
+                    self._keys.keyUp(k)
+                except Exception:
+                    pass
+            self._held = set()
 
     def menu_navigate(self, key: str) -> None:
         """Single discrete menu input: 'up'|'down'|'left'|'right'|'confirm'."""
@@ -445,6 +470,7 @@ class IOAdapter:
                 "left": self._vg.XUSB_BUTTON.XUSB_GAMEPAD_DPAD_LEFT,
                 "right": self._vg.XUSB_BUTTON.XUSB_GAMEPAD_DPAD_RIGHT,
                 "confirm": self._vg.XUSB_BUTTON.XUSB_GAMEPAD_A,
+                "start": self._vg.XUSB_BUTTON.XUSB_GAMEPAD_START,
                 "esc": self._vg.XUSB_BUTTON.XUSB_GAMEPAD_B,
             }
             button = buttons.get(key)
@@ -462,10 +488,14 @@ class IOAdapter:
         self._keys.click(x, y)
 
     def click_frame(self, x: int, y: int) -> None:
-        """Click WGC frame coordinates using the physical monitor origin."""
+        """Click frame coordinates relative to the captured game window."""
         import ctypes
 
-        origin_x, origin_y = self.config.get("wgc_monitor_origin", [0, 0])
+        window = self._game_window()
+        if window is not None:
+            origin_x, origin_y = window.left, window.top
+        else:
+            origin_x, origin_y = self.config.get("wgc_monitor_origin", [0, 0])
         user32 = ctypes.windll.user32
         user32.SetCursorPos(int(origin_x + x), int(origin_y + y))
         user32.mouse_event(0x0002, 0, 0, 0, 0)

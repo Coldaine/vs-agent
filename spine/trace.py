@@ -23,7 +23,7 @@ class EpisodeWriter:
             "inventory": inventory,
             "threats_by_octant": threats, "gems_by_octant": gems,
             "reflex_override": reflex_override, "rule_fired": rule_fired,
-            "follower_latency_ms": latency_ms, "action": action,
+            "pilot_latency_ms": latency_ms, "action": action,
         }) + "\n")
         self._states.flush()
 
@@ -53,4 +53,3 @@ class EpisodeWriter:
 def hash_prompt(path: str) -> str:
     with open(path, "rb") as f:
         return hashlib.sha256(f.read()).hexdigest()[:12]
-

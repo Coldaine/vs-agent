@@ -11,7 +11,7 @@ from vs_harness.planner.knowledge import format_knowledge_for_prompt, load_knowl
 from vs_harness.types import IntentPacket, ScreenMode
 
 
-class StrategyLeader:
+class StrategyPlanner:
     """Event-driven strategy planner (OpenAI-compatible) + offline heuristics."""
 
     def __init__(self, cfg: dict[str, Any]):

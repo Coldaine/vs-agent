@@ -17,7 +17,7 @@ class TickResult:
     action: str
     speed: float
     rule_fired: str          # clean | veto | stale | dither | level_up
-    follower_latency_ms: float | None
+    pilot_latency_ms: float | None
     degraded: bool
 
 
@@ -96,7 +96,7 @@ class Controller:
         t, direction, speed = self._last_pilot_proposal
         age_ms = (time.monotonic() - t) * 1000
         if age_ms > self.cfg["staleness_ms"]:
-            return None, 1.0, getattr(self, "_last_latency", None)
+            return None, 1.0, None
         return direction, speed, getattr(self, "_last_latency", None)
 
     def _is_reversal(self, proposal: str) -> bool:

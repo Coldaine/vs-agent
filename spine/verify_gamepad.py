@@ -11,6 +11,7 @@ from io_adapter import IOAdapter, _connected_xinput_slots
 
 def verify_gamepad() -> bool:
     cfg = yaml.safe_load(open("spine/config.yaml", encoding="utf-8"))
+    cfg["input_backend"] = "gamepad"
     before = _connected_xinput_slots()
     io = IOAdapter(backend="wgc", config=cfg)
     try:

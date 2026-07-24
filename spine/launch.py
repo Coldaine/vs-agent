@@ -16,15 +16,17 @@ def launch_game(cfg: dict, io=None) -> bool:
     ])
     return True
 
-def select_option(io, pick: str, options: list[str]) -> None:
-    """planner-chosen level-up option. Options are vertically listed."""
-    try:
-        idx = [option.lower() for option in options].index(pick.lower())
-    except ValueError:
-        idx = 0
+def select_option(io, pick: str | int, options: list[str]) -> None:
+    """Planner-chosen level-up option. Options are vertically listed."""
+    if isinstance(pick, int):
+        idx = max(0, min(pick - 1, max(len(options) - 1, 0)))
+    else:
+        try:
+            idx = [option.lower() for option in options].index(pick.lower())
+        except ValueError:
+            idx = 0
     for _ in range(idx):
         io.menu_navigate("down")
         time.sleep(0.2)
     io.menu_navigate("confirm")
-
 
