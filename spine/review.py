@@ -13,11 +13,11 @@ import model_client
 # --- directive generation from controller telemetry (trace_spec.md) ---
 def generate_directive(states: list[dict]) -> str:
     """Override-rate spike detection: any 60s window where
-    (veto+stale+dither)/ticks exceeds 2x the run median."""
+    (veto+stale+dither)/ticks exceeds 2x the run mean."""
     overrides = [(s["t"], s["rule_fired"] != "clean") for s in states]
     if not overrides:
         return "full autopsy"
-    median_rate = sum(o for _, o in overrides) / len(overrides)
+    mean_rate = sum(o for _, o in overrides) / len(overrides)
     window = 60.0
     worst, worst_rate = None, 0.0
     for t0, _ in overrides:
@@ -29,7 +29,7 @@ def generate_directive(states: list[dict]) -> str:
             worst, worst_rate = t0, rate
     if worst is not None and median_rate > 0 and worst_rate > 2 * median_rate:
         return (f"Override rate spiked to {worst_rate:.0%} during "
-                f"t={worst:.0f}-{worst+window:.0f} (run median "
+                f"t={worst:.0f}-{worst+window:.0f} (run mean "
                 f"{median_rate:.0%}). Inspect that window: was the "
                 "follower wrong, or was the reflex layer over-sensitive?")
     return "full autopsy"
