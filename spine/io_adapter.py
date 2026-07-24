@@ -19,6 +19,21 @@ from typing import Optional
 import time
 import numpy as np
 
+
+def _enable_per_monitor_dpi_awareness() -> None:
+    """Keep Win32 window coordinates in DXCam's physical-pixel space."""
+    try:
+        import ctypes
+        ctypes.windll.user32.SetProcessDpiAwarenessContext(-4)
+    except Exception:
+        try:
+            ctypes.windll.user32.SetProcessDPIAware()
+        except Exception:
+            pass
+
+
+_enable_per_monitor_dpi_awareness()
+
 DIRECTIONS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW", "HOLD"]
 
 
@@ -49,14 +64,19 @@ class IOAdapter:
     dxcam/pydirectinput/pygetwindow may be imported (AGENTS.md)."""
 
     def __init__(self, backend: str, config: dict):
-        self.backend = backend
         self.config = config
+        configured_backend = config.get("capture_backend", "wgc")
+        self.backend = (backend if backend in {"wgc", "dxcam"}
+                        else configured_backend)
         self._title_hint = (config.get("window_title_hint")
                             or config.get("game_process_hint")
                             or "Vampire Survivors")
         self._held: set[str] = set()
         self._camera = None
         self._region: Optional[tuple] = None
+        self._capture_output_idx = int(config.get("capture_output_idx", 0))
+        minimum = config.get("capture_min_dimensions", [640, 480])
+        self._min_capture_width, self._min_capture_height = minimum
 
         import pydirectinput
         pydirectinput.PAUSE = 0  # no artificial delay between key events
@@ -64,60 +84,132 @@ class IOAdapter:
 
     # --- capture ---
     def _ensure_camera(self):
+        if self.backend == "wgc":
+            return
         if self._camera is not None:
             return
         import dxcam
-        self._camera = dxcam.create(output_color="BGR")
         self._region = self._window_region()
+        self._camera = dxcam.create(output_idx=self._capture_output_idx,
+                                    output_color="BGR")
 
-    def _window_region(self) -> Optional[tuple]:
-        """(left, top, right, bottom) of the game window, or None (full
-        screen) if the window can't be located."""
-        try:
-            import pygetwindow as gw
-            for w in gw.getAllWindows():
-                if self._title_hint.lower() in (w.title or "").lower() and w.width > 0:
-                    return (max(w.left, 0), max(w.top, 0),
-                            w.left + w.width, w.top + w.height)
-        except Exception:
-            pass
-        return None
+    def _game_window(self):
+        """Prefer the exact game title so an IDE project window is never captured."""
+        import pygetwindow as gw
+        windows = [w for w in gw.getAllWindows()
+                   if w.width > 0 and w.height > 0]
+        exact = [w for w in windows if (w.title or "").strip().lower()
+                 == self._title_hint.lower()]
+        if exact:
+            return exact[0]
+        matches = [w for w in windows if self._title_hint.lower()
+                   in (w.title or "").lower()]
+        return matches[0] if matches else None
+
+    @staticmethod
+    def _monitor_bounds(window) -> tuple[int, int, int, int]:
+        """Return virtual-desktop bounds for the monitor containing a window."""
+        import ctypes
+        from ctypes import wintypes
+
+        class RECT(ctypes.Structure):
+            _fields_ = [("left", wintypes.LONG), ("top", wintypes.LONG),
+                        ("right", wintypes.LONG), ("bottom", wintypes.LONG)]
+
+        class MONITORINFO(ctypes.Structure):
+            _fields_ = [("cbSize", wintypes.DWORD), ("rcMonitor", RECT),
+                        ("rcWork", RECT), ("dwFlags", wintypes.DWORD)]
+
+        monitor = ctypes.windll.user32.MonitorFromWindow(window._hWnd, 2)
+        info = MONITORINFO()
+        info.cbSize = ctypes.sizeof(info)
+        if not ctypes.windll.user32.GetMonitorInfoW(monitor, ctypes.byref(info)):
+            raise OSError("GetMonitorInfoW failed for game window")
+        rect = info.rcMonitor
+        return rect.left, rect.top, rect.right, rect.bottom
+
+    def _window_region(self) -> tuple:
+        """Game crop in DXCam-output coordinates, including negative monitors."""
+        window = self._game_window()
+        if window is None:
+            raise RuntimeError(f"game window {self._title_hint!r} not found")
+        left, top, right, bottom = self._monitor_bounds(window)
+        x0 = max(window.left - left, 0)
+        y0 = max(window.top - top, 0)
+        x1 = min(window.left + window.width - left, right - left)
+        y1 = min(window.top + window.height - top, bottom - top)
+        if x1 <= x0 or y1 <= y0:
+            raise RuntimeError("game window has no visible monitor region")
+        return x0, y0, x1, y1
+
+    def _wgc_screenshot(self) -> np.ndarray:
+        """Capture the exact game window even when it is occluded."""
+        import cv2
+        from computer_control_mcp.core import _wgc_screenshot
+
+        result = _wgc_screenshot(self._title_hint)
+        if result is None:
+            raise BlackFrameError("WGC could not capture the game window")
+        data, _, _ = result
+        image = cv2.imdecode(np.frombuffer(data, dtype=np.uint8),
+                             cv2.IMREAD_COLOR)
+        if image is None:
+            raise BlackFrameError("WGC returned an unreadable game frame")
+        return image
 
     def _focus(self):
-        try:
-            import pygetwindow as gw
-            wins = [w for w in gw.getAllWindows()
-                    if self._title_hint.lower() in (w.title or "").lower()]
-            if wins:
-                w = wins[0]
-                if w.isMinimized:
-                    w.restore()
-                w.activate()
-        except Exception:
-            pass
+        import ctypes
+        window = self._game_window()
+        if window is None:
+            raise RuntimeError(f"game window {self._title_hint!r} not found")
+        user32 = ctypes.windll.user32
+        kernel32 = ctypes.windll.kernel32
+        for _ in range(3):
+            foreground = user32.GetForegroundWindow()
+            current_thread = kernel32.GetCurrentThreadId()
+            foreground_thread = user32.GetWindowThreadProcessId(foreground, None)
+            user32.AttachThreadInput(current_thread, foreground_thread, True)
+            try:
+                user32.ShowWindow(window._hWnd, 9)
+                user32.BringWindowToTop(window._hWnd)
+                user32.SetForegroundWindow(window._hWnd)
+            finally:
+                user32.AttachThreadInput(current_thread, foreground_thread, False)
+            time.sleep(0.15)
+            if user32.GetForegroundWindow() == window._hWnd:
+                return
+        raise RuntimeError("Windows rejected game foreground activation")
 
     def screenshot(self) -> Frame:
         """Real game frame. Raises BlackFrameError rather than silently
         returning a black frame (GOAL.md G0)."""
         import numpy as _np
         self._ensure_camera()
-        img = None
-        for _ in range(10):
-            img = (self._camera.grab(region=self._region)
-                   if self._region else self._camera.grab())
-            if img is not None:
-                break
-            time.sleep(0.01)
-        if img is None:                       # no new frame since last grab
-            img = getattr(self, "_last_img", None)
+        if self.backend == "wgc":
+            img = self._wgc_screenshot()
+        else:
+            img = None
+            for _ in range(10):
+                img = (self._camera.grab(region=self._region)
+                       if self._region else self._camera.grab())
+                if img is not None:
+                    break
+                time.sleep(0.01)
+            if img is None:                   # no new frame since last grab
+                img = getattr(self, "_last_img", None)
         if img is None:
             raise BlackFrameError("capture returned no frame")
         if float(_np.asarray(img).mean()) < 3.0:
             raise BlackFrameError("captured frame is black — check capture "
                                   "path / window focus / resolution")
+        height, width = img.shape[:2]
+        if width < self._min_capture_width or height < self._min_capture_height:
+            raise BlackFrameError(
+                f"capture is unexpectedly small ({width}x{height}); "
+                "check capture_output_idx and monitor placement")
         self._last_img = img
-        h, w = img.shape[:2]
-        return Frame(image=img, width=w, height=h, t_capture=time.monotonic())
+        return Frame(image=img, width=width, height=height,
+                     t_capture=time.monotonic())
 
     # --- input ---
     def _press_keys(self, keys):
@@ -150,20 +242,12 @@ class IOAdapter:
     def click(self, x: int, y: int) -> None:
         self._keys.click(x, y)
 
-    def ocr(self, region: tuple = None) -> str:
-        """OCR the current frame or a region [x0, y0, x1, y1].
-        Returns text string. Used by launch.py for menu checkpoints."""
-        import pytesseract
-        frame = self.screenshot()
-        img = frame.image
-        if region:
-            x0, y0, x1, y1 = region
-            img = img[y0:y1, x0:x1]
-        return pytesseract.image_to_string(img)
-
     # --- perception helpers ---
     def ocr(self, region: Optional[tuple] = None) -> str:
         import pytesseract
+        tesseract_cmd = self.config.get("tesseract_cmd")
+        if tesseract_cmd:
+            pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
         frame = self.screenshot()
         img = frame.image
         if region:

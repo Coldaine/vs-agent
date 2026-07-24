@@ -10,5 +10,7 @@ pytesseract>=0.3.10     # requires the Tesseract OCR binary on PATH
 dxcam>=0.0.5
 pydirectinput>=1.0.4
 PyGetWindow>=0.0.9
+# Required WGC window capture backend for GPU-accelerated games.
+computer-control-mcp>=0.3.10
 # Config
 PyYAML>=6.0

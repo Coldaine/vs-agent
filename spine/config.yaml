@@ -18,17 +18,19 @@ run_end_ocr_triggers: ["REAPER", "TIME'S UP"]
 game_process_hint: "VampireSurvivors"
 window_title_hint: "Vampire Survivors"
 steam_app_id: "1794680"
+capture_backend: wgc
+# DXCam output zero is the primary display. This game window runs on output 1.
+capture_output_idx: 1
+capture_min_dimensions: [640, 480]
+tesseract_cmd: "C:/Program Files/Tesseract-OCR/tesseract.exe"
 
 # detector (PROVISIONING — see status/HUMAN_NEEDED.md)
-# yolo_weights: path to forked victorcoelh/vampire-survivors-bot weights
-yolo_weights: null
+# Upstream monster_class.pt detects threats only; it does not label gems/elites.
+yolo_weights: "spine/weights/monster_class.pt"
 yolo_conf: 0.25
 # map each model class NAME to a kind the reflex layer understands
 yolo_class_map:
-  enemy: enemy
-  elite: elite
-  gem: gem
-  player: player
+  monster: enemy
 
 # OCR crop regions [x0, y0, x1, y1] in window pixels (resolution-specific,
 # set once at fixed resolution). null = OCR whole frame / best-effort.

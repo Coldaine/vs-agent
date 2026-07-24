@@ -9,6 +9,7 @@ __pycache__/
 # --- virtual environment and credentials ---
 .venv/
 .env
+spine/weights/
 
 # --- append-only logs written at runtime ---
 model_calls.jsonl

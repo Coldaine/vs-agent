@@ -44,6 +44,8 @@ def _model():
     if _MODEL is None:
         from ultralytics import YOLO
         weights = _cfg().get("yolo_weights")
+        if weights and not os.path.isabs(weights):
+            weights = os.path.join(os.path.dirname(__file__), "..", weights)
         if not weights or not os.path.exists(weights):
             raise FileNotFoundError(
                 f"YOLO weights not found (cfg yolo_weights={weights!r}). "
