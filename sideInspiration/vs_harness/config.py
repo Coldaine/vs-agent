@@ -7,6 +7,8 @@ from typing import Any
 
 import yaml
 
+from vs_harness.paths import resolve_config_path
+
 
 _ENV_PATTERN = re.compile(r"\$\{([^}:]+)(?::-([^}]*))?\}")
 
@@ -45,8 +47,14 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
     return out
 
 
-def load_config(path: str | Path) -> dict[str, Any]:
-    path = Path(path).resolve()
+def load_config(path: str | Path, _seen: frozenset[Path] | None = None) -> dict[str, Any]:
+    path = resolve_config_path(path)
+    seen = _seen or frozenset()
+    if path in seen:
+        cycle = " -> ".join(str(p) for p in (*seen, path))
+        raise ValueError(f"Config inheritance cycle: {cycle}")
+    seen = seen | {path}
+
     with path.open("r", encoding="utf-8") as f:
         raw = yaml.safe_load(f) or {}
 
@@ -54,14 +62,13 @@ def load_config(path: str | Path) -> dict[str, Any]:
     if inherits:
         parent_path = Path(inherits)
         if not parent_path.is_absolute():
-            # resolve relative to repo root (cwd) or config file parent
             candidates = [
                 Path.cwd() / parent_path,
                 path.parent / parent_path,
                 path.parent.parent / parent_path,
             ]
             parent_path = next((c for c in candidates if c.exists()), candidates[0])
-        parent = load_config(parent_path)
+        parent = load_config(parent_path, _seen=seen)
         merged = _deep_merge(parent, raw)
     else:
         merged = raw

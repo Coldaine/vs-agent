@@ -9,15 +9,15 @@ from typing import Any
 import numpy as np
 
 from vs_harness.config import load_config
-from vs_harness.control.commit_breakout import build_wrapper
 from vs_harness.loop.harness import run_episode
-from vs_harness.movers.registry import build_mover
+from vs_harness.paths import default_config
 from vs_harness.perception.factory import PERCEPTION_BACKENDS, build_perception
 from vs_harness.sim.swarm_sim import SwarmSim
-from vs_harness.types import IntentPacket
 
 
 def bench_perception(cfg: dict[str, Any], backend: str, frames: int = 40, seed: int = 0) -> dict[str, Any]:
+    if frames <= 0:
+        raise ValueError("frames must be > 0")
     cfg = dict(cfg)
     cfg["perception"] = dict(cfg.get("perception", {}))
     cfg["perception"]["backend"] = backend
@@ -53,6 +53,10 @@ def run_perception_bakeoff(cfg: dict[str, Any]) -> dict[str, Any]:
     backends = list(pb.get("backends") or ["mock", "color_heuristic", "optical_flow"])
     frames = int(pb.get("frames", 40))
     seeds = list(pb.get("seeds", [1, 2]))
+    if not seeds:
+        raise ValueError("perception_bakeoff.seeds must be non-empty")
+    if frames <= 0:
+        raise ValueError("perception_bakeoff.frames must be > 0")
     mover = pb.get("mover_for_episode", "sector_density")
     episode_s = float(pb.get("episode_seconds", 6.0))
     report_path = Path(pb.get("report_path", "runs/perception_bakeoff_report.json"))
@@ -106,7 +110,7 @@ def run_perception_bakeoff(cfg: dict[str, Any]) -> dict[str, Any]:
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Perception backend bakeoff")
-    parser.add_argument("--config", default="configs/perception_bakeoff.yaml")
+    parser.add_argument("--config", default=default_config("perception_bakeoff.yaml"))
     args = parser.parse_args(argv)
     cfg = load_config(args.config)
     run_perception_bakeoff(cfg)

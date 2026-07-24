@@ -9,7 +9,6 @@ from vs_harness.config import load_config
 from vs_harness.control.commit_breakout import build_wrapper
 from vs_harness.control.input_injector import InputInjector
 from vs_harness.control.kill_switch import KillSwitch
-from vs_harness.host.launch import launch_or_attach
 from vs_harness.leader.menu import handle_paused_ui
 from vs_harness.leader.strategy import StrategyLeader
 from vs_harness.mode.detector import ModeDetector
@@ -36,11 +35,15 @@ def run_episode(
     duration = float(sim_seconds if sim_seconds is not None else loop.get("sim_seconds", 45.0))
     # Classic plan path: VLM follower at ~2 Hz with sticky keys
     follower_hz = float(loop.get("follower_hz", 0.0))
-    auto_launch = bool(loop.get("auto_launch", True))
 
-    if mode == "live" and auto_launch:
-        result = launch_or_attach(cfg)
-        logger.info("launch_or_attach: %s", result)
+    # Parked under sideInspiration: simulation only. Live I/O must go through
+    # spine/controller.py + computer-control-mcp when/if pieces are adopted.
+    if mode != "sim":
+        raise RuntimeError(
+            "vs_harness in sideInspiration is simulation-only "
+            f"(got loop.mode={mode!r}). Set loop.mode: sim, or adopt live "
+            "control through spine before enabling a live path."
+        )
 
     sim = SwarmSim(seed=seed) if mode == "sim" else None
     capture = build_capture(cfg, sim=sim)

@@ -13,7 +13,8 @@ def test_rle_roundtrip():
     assert np.array_equal(out, mask)
 
 
-def test_leader_levelup_ranking():
+def test_leader_levelup_ranking(monkeypatch):
+    monkeypatch.delenv("NOPE", raising=False)
     cfg = {
         "leader": {"enabled": True, "knowledge_pack": "configs/evolution_knowledge.yaml", "intent_refresh_s": 1},
         "openai": {"base_url": "http://x", "api_key_env": "NOPE", "leader_model": "x"},

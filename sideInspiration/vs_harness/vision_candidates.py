@@ -6,14 +6,12 @@ from typing import Any
 
 import yaml
 
-from vs_harness.config import load_config
+from vs_harness.paths import default_config, resolve_config_path
 
 
-def load_candidates(path: str | Path = "configs/vision_candidates.yaml") -> dict[str, Any]:
-    path = Path(path)
-    if not path.exists():
-        path = Path.cwd() / path
-    with path.open("r", encoding="utf-8") as f:
+def load_candidates(path: str | Path | None = None) -> dict[str, Any]:
+    resolved = resolve_config_path(path or default_config("vision_candidates.yaml"))
+    with resolved.open("r", encoding="utf-8") as f:
         return yaml.safe_load(f) or {}
 
 

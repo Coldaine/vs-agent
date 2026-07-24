@@ -17,19 +17,10 @@ DEFAULT_LEVELUP_OPTIONS = ["Weapon A", "Passive B", "Evolution C"]
 def extract_levelup_options(frame_bgr: np.ndarray | None) -> list[str]:
     """Best-effort option text from a level-up panel.
 
-    v1: returns placeholders. Hook OCR (e.g. pytesseract / leader VLM crop) here.
+    Sim/dev helper only: returns placeholders. Real OCR/VLM extraction belongs
+    in an adopted spine path — never invent live card labels.
     """
-    if frame_bgr is None:
-        return list(DEFAULT_LEVELUP_OPTIONS)
-    # Brightness bands as crude "three cards" presence check
-    h, w = frame_bgr.shape[:2]
-    thirds = []
-    for i in range(3):
-        x0, x1 = int(w * (0.15 + i * 0.25)), int(w * (0.35 + i * 0.25))
-        crop = frame_bgr[int(h * 0.35) : int(h * 0.7), x0:x1]
-        thirds.append(float(crop.mean()) if crop.size else 0.0)
-    if sum(1 for m in thirds if m > 80) >= 2:
-        return [f"Option {i+1}" for i in range(3)]
+    del frame_bgr  # unused until OCR is wired through spine
     return list(DEFAULT_LEVELUP_OPTIONS)
 
 
@@ -41,6 +32,12 @@ def handle_paused_ui(
     now_s: float,
 ) -> dict[str, Any]:
     """Choose a level-up/chest option and inject menu navigation keys."""
+    if injector.live:
+        raise RuntimeError(
+            "Live menu handling is disabled in sideInspiration/vs_harness "
+            "(no OCR/VLM option extraction; would always pick index 0). "
+            "Use sim mode, or adopt menu selection through spine."
+        )
     intent = leader.maybe_refresh(mode, frame_bgr, now_s)
     options = extract_levelup_options(frame_bgr)
     choice = leader.choose_levelup_option(options)

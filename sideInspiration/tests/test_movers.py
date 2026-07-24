@@ -11,7 +11,8 @@ def _cfg(approach: str) -> dict:
     }
 
 
-def test_all_movers_propose():
+def test_all_movers_propose(monkeypatch):
+    monkeypatch.delenv("NOPE", raising=False)
     sim = SwarmSim(seed=1, n_enemies=25)
     threat, player, gems, pxy = sim.ground_truth_masks()
     from vs_harness.types import PerceptionFrame

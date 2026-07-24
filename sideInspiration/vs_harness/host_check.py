@@ -7,6 +7,7 @@ from pathlib import Path
 
 from vs_harness.config import load_config
 from vs_harness.host.launch import env_endpoint_summary, find_window, launch_or_attach
+from vs_harness.paths import default_config
 
 
 def _gpu_summary() -> str:
@@ -81,7 +82,7 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Check VS harness host/endpoint config")
     parser.add_argument(
         "--config",
-        default="configs/default.yaml",
+        default=default_config("default.yaml"),
         type=Path,
         help="Path to YAML config",
     )

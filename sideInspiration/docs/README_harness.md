@@ -66,7 +66,8 @@ python3 -m vs_harness.host_check --config configs/default.yaml
 
 ## Live game
 
-1. Windowed Vampire Survivors; set `loop.mode: live`
+1. Live mode is disabled in `sideInspiration/` — keep `loop.mode: sim` here.
+   Adopt through `spine/` before any real-window control.
 2. Classic plan config: `configs/vlm_follower.yaml` (`follower_hz: 2`, OpenAI-compatible follower + leader)
 3. Or perception path: `perception.backend: sam3` / `yolo_world` with `host.capture_backend: mss`
 4. Auto launch/attach via Steam app id `1794680` (or `host.launch_command`)

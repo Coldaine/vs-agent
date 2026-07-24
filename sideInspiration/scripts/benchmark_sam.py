@@ -9,16 +9,19 @@ import time
 import numpy as np
 
 from vs_harness.config import load_config
+from vs_harness.paths import default_config
 from vs_harness.perception.factory import build_perception
 from vs_harness.sim.swarm_sim import SwarmSim
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", default="configs/default.yaml")
+    parser.add_argument("--config", default=default_config("default.yaml"))
     parser.add_argument("--backend", choices=["mock", "sam3"], default=None)
     parser.add_argument("--frames", type=int, default=50)
     args = parser.parse_args()
+    if args.frames <= 0:
+        raise SystemExit("--frames must be > 0")
 
     cfg = load_config(args.config)
     if args.backend:
@@ -32,7 +35,6 @@ def main() -> None:
     for i in range(args.frames):
         sim.step("NE" if i % 2 == 0 else "SW")
         frame = sim.render()
-        t0 = time.perf_counter()
         out = perc.infer(frame, time.perf_counter())
         times.append(out.inference_ms)
     arr = np.array(times)

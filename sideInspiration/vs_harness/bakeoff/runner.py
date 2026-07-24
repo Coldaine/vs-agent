@@ -8,6 +8,7 @@ from typing import Any
 from vs_harness.config import load_config
 from vs_harness.loop.harness import run_episode
 from vs_harness.movers.registry import APPROACH_IDS
+from vs_harness.paths import default_config
 from vs_harness.trace.critique import critique_run
 
 
@@ -16,18 +17,18 @@ def run_bakeoff(cfg: dict[str, Any]) -> dict[str, Any]:
     approaches = list(b.get("approaches") or APPROACH_IDS)
     wrapper_modes = list(b.get("wrapper_modes", [True, False]))
     seeds = list(b.get("seeds", [1, 2, 3]))
+    if not seeds:
+        raise ValueError("bakeoff.seeds must be non-empty")
     trials = int(b.get("trials_per_config", 1))
     sim_seconds = float(b.get("sim_seconds", cfg.get("loop", {}).get("sim_seconds", 40.0)))
     report_path = Path(b.get("report_path", "runs/bakeoff_report.json"))
     report_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Force sim for bakeoff unless explicitly live
+    # Bakeoff is always sim in this parked package
     cfg = dict(cfg)
     cfg.setdefault("loop", {})
     cfg["loop"] = dict(cfg["loop"])
-    cfg["loop"]["mode"] = cfg["loop"].get("mode", "sim")
-    if cfg["loop"]["mode"] != "live":
-        cfg["loop"]["mode"] = "sim"
+    cfg["loop"]["mode"] = "sim"
 
     results: list[dict[str, Any]] = []
     for approach in approaches:
@@ -99,7 +100,7 @@ def _summarize(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Run mover bakeoff trials")
-    parser.add_argument("--config", default="configs/bakeoff.yaml")
+    parser.add_argument("--config", default=default_config("bakeoff.yaml"))
     args = parser.parse_args(argv)
     cfg = load_config(args.config)
     run_bakeoff(cfg)

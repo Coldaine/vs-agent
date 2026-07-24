@@ -8,6 +8,10 @@ This folder is **not** part of the live `spine/` gate path. Keep it here as
 reference tooling. We will review it and adopt pieces into the main system
 where they earn their keep.
 
+`vs_harness` is **simulation-only** in this tree (`loop.mode` must be `sim`).
+Live keyboard/window control is intentionally disabled so it cannot bypass
+`spine/controller.py` / computer-control-mcp.
+
 | Path | Contents |
 |---|---|
 | `vs_harness/` | Leader–follower harness (SAM/YOLO perception, movers, bakeoff, traces) |

@@ -5,6 +5,7 @@ import json
 
 from vs_harness.config import load_config
 from vs_harness.loop.harness import run_episode
+from vs_harness.paths import default_config
 from vs_harness.trace.critique import critique_path_to_json
 
 
@@ -12,8 +13,8 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Vampire Survivors agent harness")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
-    run_p = sub.add_parser("run", help="Run one episode (sim or live)")
-    run_p.add_argument("--config", default="configs/default.yaml")
+    run_p = sub.add_parser("run", help="Run one sim episode (live disabled here)")
+    run_p.add_argument("--config", default=default_config("default.yaml"))
     run_p.add_argument("--approach", default=None)
     run_p.add_argument("--wrapper", choices=["on", "off", "config"], default="config")
     run_p.add_argument("--seed", type=int, default=None)
@@ -24,7 +25,7 @@ def main(argv: list[str] | None = None) -> None:
     crit_p.add_argument("--out", default=None)
 
     host_p = sub.add_parser("host-check", help="Validate host/endpoint config")
-    host_p.add_argument("--config", default="configs/default.yaml")
+    host_p.add_argument("--config", default=default_config("default.yaml"))
 
     sub.add_parser("vision-review", help="Print VLM / vision candidate review")
 
