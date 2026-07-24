@@ -73,8 +73,8 @@ def escape_vector(dets: list[Detection], player: Detection, k: int) -> str:
     )[:k]
     if not threats:
         return "HOLD"
-    vx = sum(player.x - d.x for d in threats)
-    vy = sum(player.y - d.y for d in threats)
+    vx = sum((player.x - d.x)*d.weight for d in threats)
+    vy = sum((player.y - d.y)*d.weight for d in threats)
     escape = octant_of(vx, vy)
 
     counts = [0] * 8
