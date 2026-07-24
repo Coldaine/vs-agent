@@ -32,10 +32,10 @@ def classify_screen(io) -> tuple[str, str]:
     text = _text(io)
     if "PHOTOSENSITIVITY WARNING" in text:
         return "WARNING", text
-    if any(token in text for token in _CHARACTER_TOKENS):
-        return "CHARACTER_SELECT", text
     if "MAD FOREST" in text:
         return "STAGE_SELECT", text
+    if any(token in text for token in _CHARACTER_TOKENS):
+        return "CHARACTER_SELECT", text
     if re.search(r"VAMPIRE\W{0,6}SURVIVORS", text):
         return "TITLE", text
     if re.search(r"\b\d{1,2}:\d{2}\b", text):
@@ -145,11 +145,10 @@ def _click_text(io, text_fragment: str) -> bool:
 
 def _confirm_character(io, cfg: dict) -> None:
     """Advance from CHARACTER_SELECT to STAGE_SELECT by clicking START."""
-    if not _click_text(io, "START"):
-        io.menu_navigate("start")
-        time.sleep(0.5)
-        if classify_screen(io)[0] != "STAGE_SELECT":
-            _press_and_expect(io, "start", {"STAGE_SELECT"}, timeout_s=8.0)
+    if _click_text(io, "START"):
+        _wait_for_state(io, {"STAGE_SELECT"}, timeout_s=8.0)
+        return
+    _press_and_expect(io, "start", {"STAGE_SELECT"}, timeout_s=8.0)
 
 
 def to_stage_select(io, cfg: dict) -> None:
@@ -179,12 +178,15 @@ def start_run(io, cfg: dict) -> None:
         raise
 
 
-def select_option(io, pick: str, options: list[str]) -> None:
+def select_option(io, pick: str | int, options: list[str]) -> None:
     """Leader-chosen level-up option. Options are vertically listed."""
-    try:
-        idx = [option.lower() for option in options].index(pick.lower())
-    except ValueError:
-        idx = 0
+    if isinstance(pick, int):
+        idx = max(0, min(pick - 1, max(len(options) - 1, 0)))
+    else:
+        try:
+            idx = [option.lower() for option in options].index(pick.lower())
+        except ValueError:
+            idx = 0
     for _ in range(idx):
         io.menu_navigate("down")
         time.sleep(0.2)

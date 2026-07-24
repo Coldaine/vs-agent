@@ -25,16 +25,19 @@ def bench_perception(cfg: dict[str, Any], backend: str, frames: int = 40, seed: 
     perc = build_perception(cfg, sim=sim)
     times = []
     ious = []
-    for i in range(frames):
-        sim.step("NE" if i % 2 == 0 else "W")
-        frame = sim.render()
-        gt, _, _, _ = sim.ground_truth_masks()
-        t0 = time.perf_counter()
-        out = perc.infer(frame, time.perf_counter())
-        times.append((time.perf_counter() - t0) * 1000)
-        inter = np.logical_and(out.threat_union, gt).sum()
-        union = np.logical_or(out.threat_union, gt).sum()
-        ious.append(float(inter / union) if union else 1.0)
+    try:
+        for i in range(frames):
+            sim.step("NE" if i % 2 == 0 else "W")
+            frame = sim.render()
+            gt, _, _, _ = sim.ground_truth_masks()
+            t0 = time.perf_counter()
+            out = perc.infer(frame, time.perf_counter())
+            times.append((time.perf_counter() - t0) * 1000)
+            inter = np.logical_and(out.threat_union, gt).sum()
+            union = np.logical_or(out.threat_union, gt).sum()
+            ious.append(float(inter / union) if union else 1.0)
+    finally:
+        perc.close()
     arr = np.array(times)
     return {
         "backend": backend,
