@@ -22,6 +22,9 @@ capture_backend: wgc
 # DXCam output zero is the primary display. This game window runs on output 1.
 capture_output_idx: 1
 capture_min_dimensions: [640, 480]
+capture_retries: 3
+key_diff_threshold: 0.02
+movement_diff_threshold: 0.1
 tesseract_cmd: "C:/Program Files/Tesseract-OCR/tesseract.exe"
 
 # detector (PROVISIONING — see status/HUMAN_NEEDED.md)

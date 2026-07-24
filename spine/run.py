@@ -41,6 +41,17 @@ def follower_loop(io, controller, cfg, stop, prompt_text, shared):
             time.sleep(0.1)
 
 
+def _detect_for_tick(frame, reflex_only: bool):
+    """G1 remains usable when the optional detector is unavailable."""
+    try:
+        return perceive.detect(frame)
+    except (FileNotFoundError, ImportError, RuntimeError) as error:
+        if not reflex_only:
+            raise
+        print(f"[reflex-only] detector unavailable: {error}", file=sys.stderr)
+        return [], reflex.Detection(frame.width / 2.0, frame.height / 2.0, "player")
+
+
 def run_episode(eval_mode: bool, reflex_only: bool = False, disable_leader: bool = False):
     cfg = yaml.safe_load(open("spine/config.yaml"))
     io = IOAdapter(backend=os.environ.get("VS_IO_BACKEND", "auto"), config=cfg)
@@ -55,10 +66,6 @@ def run_episode(eval_mode: bool, reflex_only: bool = False, disable_leader: bool
     latencies, start = [], time.monotonic()
 
     try:
-        if not eval_mode: # Manual starts skip launch logic if already in-game? 
-            # Actually GOAL.md says launch.py handles macro.
-            pass
-        
         launch.to_stage_select(io, cfg)          # launch + menu macro
         launch.start_run(io, cfg)
         
@@ -91,7 +98,7 @@ def run_episode(eval_mode: bool, reflex_only: bool = False, disable_leader: bool
             if screen_type in ("DEATH", "RUN_END"):
                 break
 
-            dets, player = perceive.detect(frame)
+            dets, player = _detect_for_tick(frame, reflex_only)
             result = controller.tick(dets, player, screen_type, strafe=reflex_only)
             if result.follower_latency_ms:
                 latencies.append(result.follower_latency_ms)

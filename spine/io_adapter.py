@@ -77,6 +77,8 @@ class IOAdapter:
         self._capture_output_idx = int(config.get("capture_output_idx", 0))
         minimum = config.get("capture_min_dimensions", [640, 480])
         self._min_capture_width, self._min_capture_height = minimum
+        self._capture_retries = int(config.get("capture_retries", 3))
+        self._last_img: Optional[np.ndarray] = None
 
         import pydirectinput
         pydirectinput.PAUSE = 0  # no artificial delay between key events
@@ -180,36 +182,48 @@ class IOAdapter:
                 return
         raise RuntimeError("Windows rejected game foreground activation")
 
-    def screenshot(self) -> Frame:
-        """Real game frame. Raises BlackFrameError rather than silently
-        returning a black frame (GOAL.md G0)."""
-        import numpy as _np
+    def _capture_image(self) -> np.ndarray | None:
         self._ensure_camera()
         if self.backend == "wgc":
-            img = self._wgc_screenshot()
-        else:
-            img = None
-            for _ in range(10):
-                img = (self._camera.grab(region=self._region)
-                       if self._region else self._camera.grab())
-                if img is not None:
-                    break
-                time.sleep(0.01)
-            if img is None:                   # no new frame since last grab
-                img = getattr(self, "_last_img", None)
-        if img is None:
-            raise BlackFrameError("capture returned no frame")
-        if float(_np.asarray(img).mean()) < 3.0:
-            raise BlackFrameError("captured frame is black — check capture "
-                                  "path / window focus / resolution")
-        height, width = img.shape[:2]
-        if width < self._min_capture_width or height < self._min_capture_height:
-            raise BlackFrameError(
-                f"capture is unexpectedly small ({width}x{height}); "
-                "check capture_output_idx and monitor placement")
-        self._last_img = img
-        return Frame(image=img, width=width, height=height,
-                     t_capture=time.monotonic())
+            return self._wgc_screenshot()
+        img = None
+        for _ in range(10):
+            img = (self._camera.grab(region=self._region)
+                   if self._region else self._camera.grab())
+            if img is not None:
+                break
+            time.sleep(0.01)
+        return img
+
+    def screenshot(self) -> Frame:
+        """Return a valid game frame, retrying transient WGC resize glitches."""
+        last_error = "capture returned no frame"
+        for attempt in range(1, self._capture_retries + 1):
+            try:
+                img = self._capture_image()
+                if img is None:
+                    raise BlackFrameError("capture returned no frame")
+                if float(np.asarray(img).mean()) < 3.0:
+                    raise BlackFrameError("captured frame is black")
+                height, width = img.shape[:2]
+                if (width < self._min_capture_width
+                        or height < self._min_capture_height):
+                    raise BlackFrameError(
+                        f"capture is unexpectedly small ({width}x{height})")
+                self._last_img = img
+                return Frame(image=img, width=width, height=height,
+                             t_capture=time.monotonic())
+            except BlackFrameError as error:
+                last_error = str(error)
+                if attempt < self._capture_retries:
+                    time.sleep(0.15)
+
+        if self._last_img is not None:
+            height, width = self._last_img.shape[:2]
+            print(f"[capture] retry exhaustion ({last_error}); using last good frame")
+            return Frame(image=self._last_img, width=width, height=height,
+                         t_capture=time.monotonic())
+        raise BlackFrameError(last_error)
 
     # --- input ---
     def _press_keys(self, keys):
