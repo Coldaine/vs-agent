@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import sys
 import unittest
@@ -64,6 +65,25 @@ class FakeSDK:
         return self.thread
 
 
+class BlockingFakeSDK(FakeSDK):
+    def __init__(
+        self,
+        account: dict,
+        thread: FakeThread,
+        entered: asyncio.Event,
+        release: asyncio.Event,
+    ) -> None:
+        super().__init__(account, thread)
+        self.entered = entered
+        self.release = release
+
+    async def __aenter__(self):
+        self.enter_count += 1
+        self.entered.set()
+        await self.release.wait()
+        return self
+
+
 class CodexAgentClientTests(unittest.IsolatedAsyncioTestCase):
     def _client(self, sdk: FakeSDK, image_factory=lambda path: ("image", path)):
         self.sandbox = object()
@@ -83,6 +103,38 @@ class CodexAgentClientTests(unittest.IsolatedAsyncioTestCase):
         await client.start()
 
         self.assertEqual(sdk.enter_count, 1)
+
+    async def test_concurrent_starts_enter_and_close_one_sdk_context(self) -> None:
+        release = asyncio.Event()
+        first = BlockingFakeSDK(
+            {"account": {"type": "chatgpt"}},
+            FakeThread("first-thread"),
+            asyncio.Event(),
+            release,
+        )
+        second = BlockingFakeSDK(
+            {"account": {"type": "chatgpt"}},
+            FakeThread("second-thread"),
+            asyncio.Event(),
+            release,
+        )
+        sdk_factories = iter((first, second))
+        client = codex_sdk_client.CodexAgentClient(
+            sdk_factory=lambda: next(sdk_factories)
+        )
+
+        first_start = asyncio.create_task(client.start())
+        await asyncio.wait_for(first.entered.wait(), timeout=1)
+        second_start = asyncio.create_task(client.start())
+        await asyncio.sleep(0)
+        release.set()
+        await asyncio.gather(first_start, second_start)
+        await client.close()
+
+        self.assertEqual(first.enter_count, 1)
+        self.assertEqual(second.enter_count, 0)
+        self.assertEqual(first.exit_count, 1)
+        self.assertEqual(second.exit_count, 0)
 
     async def test_start_rejects_non_chatgpt_managed_authentication(self) -> None:
         sdk = FakeSDK({"account": {"type": "apiKey"}}, FakeThread("thread-1"))
@@ -134,6 +186,20 @@ class CodexAgentClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(sdk.started, [])
         self.assertEqual(invocation.thread_id, "continued-thread")
 
+    async def test_invoke_rejects_resuming_a_thread_owned_by_another_role(self) -> None:
+        thread = FakeThread("shared-thread")
+        sdk = FakeSDK({"account": {"type": "chatgpt"}}, thread)
+        client = self._client(sdk)
+
+        await client.invoke("leader", "Lead.", {"type": "object"})
+
+        with self.assertRaisesRegex(RuntimeError, "different role"):
+            await client.invoke(
+                "follower", "Follow.", {"type": "object"}, thread_id="shared-thread"
+            )
+
+        self.assertEqual(sdk.resumed, [])
+
     async def test_invoke_passes_an_image_as_a_local_sdk_input(self) -> None:
         thread = FakeThread("follower-thread")
         sdk = FakeSDK({"account": {"type": "chatgpt"}}, thread)
@@ -159,6 +225,19 @@ class CodexAgentClientTests(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaisesRegex(RuntimeError, "invalid JSON"):
             await self._client(sdk).invoke("leader", "Return JSON.", {"type": "object"})
+
+    async def test_invoke_rejects_a_json_object_that_violates_its_schema(self) -> None:
+        thread = FakeThread("leader-thread", FakeTurn('{"direction":"SIDEWAYS"}'))
+        sdk = FakeSDK({"account": {"type": "chatgpt"}}, thread)
+        schema = {
+            "type": "object",
+            "properties": {"direction": {"enum": ["HOLD"]}},
+            "required": ["direction"],
+            "additionalProperties": False,
+        }
+
+        with self.assertRaisesRegex(RuntimeError, "schema"):
+            await self._client(sdk).invoke("leader", "Return JSON.", schema)
 
     async def test_close_exits_the_sdk_context_once(self) -> None:
         sdk = FakeSDK({"account": {"type": "chatgpt"}}, FakeThread("thread-1"))

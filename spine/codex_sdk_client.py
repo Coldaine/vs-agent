@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from jsonschema import ValidationError, validate
+from jsonschema.exceptions import SchemaError
 from openai_codex import ApprovalMode, AsyncCodex, LocalImageInput, Sandbox
 
 
@@ -45,38 +48,43 @@ class CodexAgentClient:
         self._context: Any | None = None
         self._sdk: Any | None = None
         self._closed = False
+        self._lifecycle_lock = asyncio.Lock()
+        self._thread_lock = asyncio.Lock()
+        self._thread_roles: dict[str, str] = {}
 
     async def start(self) -> None:
         """Enter the SDK once and confirm it is using the existing ChatGPT login."""
 
-        if self._sdk is not None:
-            return
-        if self._closed:
-            raise RuntimeError("Codex SDK client is closed")
+        async with self._lifecycle_lock:
+            if self._sdk is not None:
+                return
+            if self._closed:
+                raise RuntimeError("Codex SDK client is closed")
 
-        context = self._sdk_factory()
-        sdk = await context.__aenter__()
-        try:
-            if not _is_chatgpt_managed_account(await sdk.account()):
-                raise RuntimeError("Codex SDK account is not ChatGPT-managed authentication")
-        except Exception:
-            await context.__aexit__(None, None, None)
-            self._closed = True
-            raise
+            context = self._sdk_factory()
+            sdk = await context.__aenter__()
+            try:
+                if not _is_chatgpt_managed_account(await sdk.account()):
+                    raise RuntimeError("Codex SDK account is not ChatGPT-managed authentication")
+            except Exception:
+                await context.__aexit__(None, None, None)
+                self._closed = True
+                raise
 
-        self._context = context
-        self._sdk = sdk
+            self._context = context
+            self._sdk = sdk
 
     async def close(self) -> None:
         """Exit the owned SDK context once."""
 
-        if self._context is None or self._closed:
-            return
-        context = self._context
-        self._context = None
-        self._sdk = None
-        self._closed = True
-        await context.__aexit__(None, None, None)
+        async with self._lifecycle_lock:
+            if self._context is None or self._closed:
+                return
+            context = self._context
+            self._context = None
+            self._sdk = None
+            self._closed = True
+            await context.__aexit__(None, None, None)
 
     async def invoke(
         self,
@@ -94,12 +102,8 @@ class CodexAgentClient:
         if self._sdk is None:
             raise RuntimeError("Codex SDK client did not start")
 
-        options = self._thread_options()
-        thread = (
-            await self._sdk.thread_resume(thread_id, **options)
-            if thread_id is not None
-            else await self._sdk.thread_start(**options)
-        )
+        async with self._thread_lock:
+            thread = await self._role_thread(role, thread_id)
         input_value: str | list[Any] = prompt
         if image_path is not None:
             input_value = [prompt, self._image_factory(str(image_path))]
@@ -109,7 +113,7 @@ class CodexAgentClient:
             approval_mode=self._approval_mode,
             sandbox=self._sandbox,
         )
-        payload = _parse_final_response(turn.final_response)
+        payload = _parse_final_response(turn.final_response, schema)
         return CodexInvocation(
             payload=payload,
             thread_id=thread.id,
@@ -123,6 +127,28 @@ class CodexAgentClient:
             "sandbox": self._sandbox,
             "config": _RESTRICTED_CONFIG,
         }
+
+    async def _role_thread(self, role: str, thread_id: str | None) -> Any:
+        if self._sdk is None:
+            raise RuntimeError("Codex SDK client did not start")
+        if thread_id is not None:
+            self._assert_thread_role(thread_id, role)
+            thread = await self._sdk.thread_resume(thread_id, **self._thread_options())
+            self._assert_thread_role(thread.id, role)
+            self._thread_roles[thread_id] = role
+        else:
+            thread = await self._sdk.thread_start(**self._thread_options())
+            self._assert_thread_role(thread.id, role)
+        self._thread_roles[thread.id] = role
+        return thread
+
+    def _assert_thread_role(self, thread_id: str, role: str) -> None:
+        owner = self._thread_roles.get(thread_id)
+        if owner is not None and owner != role:
+            raise RuntimeError(
+                f"Codex thread {thread_id!r} belongs to {owner!r}, not role {role!r}; "
+                "resuming it under a different role is forbidden"
+            )
 
 
 def _is_chatgpt_managed_account(metadata: Any) -> bool:
@@ -141,7 +167,7 @@ def _field(value: Any, name: str) -> Any:
     return getattr(value, name, None)
 
 
-def _parse_final_response(final_response: Any) -> dict:
+def _parse_final_response(final_response: Any, schema: dict) -> dict:
     if not isinstance(final_response, str):
         raise RuntimeError("Codex SDK returned invalid JSON final response")
     try:
@@ -150,6 +176,10 @@ def _parse_final_response(final_response: Any) -> dict:
         raise RuntimeError("Codex SDK returned invalid JSON final response") from error
     if not isinstance(payload, dict):
         raise RuntimeError("Codex SDK returned a non-object JSON final response")
+    try:
+        validate(instance=payload, schema=schema)
+    except (SchemaError, ValidationError) as error:
+        raise RuntimeError("Codex SDK final response failed schema validation") from error
     return payload
 
 
