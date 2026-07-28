@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status:** IN PROGRESS
+**Status:** COMPLETE — live gameplay calibration remains a separate G0 gate
 
 **Goal:** Replace the bespoke model-orchestration loop with a durable LangGraph goal runtime whose leader and follower both run as `gpt-5.6-luna` through the user's existing ChatGPT Pro OAuth login in the local Codex CLI.
 
@@ -103,10 +103,10 @@
 - Consumes: installed Codex OAuth session, test suite, LangGraph graph, and optional live game process.
 - Produces: reproducible proof without recording credentials or treating a model response as gameplay proof.
 
-- [ ] **Step 1: Run OAuth preflight:** `codex login status` must say `Logged in using ChatGPT`.
-- [ ] **Step 2: Run exact-model smoke:** invoke `codex exec --ignore-user-config --ignore-rules --ephemeral --sandbox read-only --model gpt-5.6-luna` and require a known response.
-- [ ] **Step 3: Run** `.venv\Scripts\python.exe -m unittest discover -s tests -p "test_*.py" -v` and `.venv\Scripts\python.exe -m compileall -q spine`.
-- [ ] **Step 4: Run a graph smoke with fake game tools but the real OAuth leader and follower**, proving both roles reach `gpt-5.6-luna` and structured outputs drive graph transitions.
-- [ ] **Step 5: If the game is safely attachable, run one bounded live control-window smoke; otherwise report that runtime boundary as unverified without weakening the completed adapter/graph claims.**
-- [ ] **Step 6: Mark this plan complete only after every non-optional requirement is evidenced; promote lasting facts into `docs/architecture.md`, then delete this temporary plan in a later cleanup commit.**
+- [x] **Step 1: Run OAuth preflight:** `codex login status` reported `Logged in using ChatGPT`.
+- [x] **Step 2: Run exact-model smoke:** `gpt-5.6-luna` returned the required marker through `codex exec` and ChatGPT OAuth.
+- [x] **Step 3: Run** `.venv\Scripts\python.exe -m unittest discover -s tests -p "test_*.py" -v` and `.venv\Scripts\python.exe -m compileall -q spine`; 38 tests pass and compilation is clean.
+- [x] **Step 4: Run a graph smoke with fake game tools but the real OAuth leader and follower**; both `gpt-5.6-luna` roles completed and the deterministic evaluator returned `achieved` with `smoke-control` and `smoke-outcome` evidence.
+- [x] **Step 5: Keep the live control-window smoke unclaimed.** The game is not safely attachable yet, and the six modifier states still need live UI verification. These remain G0 work documented in `docs/architecture.md` and are not inferred from framework tests.
+- [x] **Step 6: Mark the framework/OAuth plan complete after promoting lasting facts into `docs/architecture.md`.** Keep this requested plan artifact through user review; delete it in a later accepted cleanup rather than during the delivery commit.
 - [ ] **Step 7: Push the branch** after validation so the durable work is preserved remotely. Do not open a pull request until the whole scoped migration is reviewable.

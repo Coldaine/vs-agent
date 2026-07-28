@@ -41,6 +41,20 @@ class OAuthEnvironmentTests(unittest.TestCase):
 
 
 class CodexOAuthRunnerTests(unittest.TestCase):
+    def test_resolves_windows_codex_shim_before_direct_process_launch(self) -> None:
+        executor = RecordingExecutor()
+        runner = oauth_codex.CodexOAuthRunner(
+            executor=executor,
+            environ={},
+            executable_resolver=lambda _: "C:/Users/test/.local/bin/codex.cmd",
+        )
+
+        runner.check_login()
+
+        self.assertEqual(
+            executor.calls[0][0][0], "C:/Users/test/.local/bin/codex.cmd"
+        )
+
     def test_refuses_non_chatgpt_login(self) -> None:
         executor = RecordingExecutor(login_text="Logged in using an API key")
         runner = oauth_codex.CodexOAuthRunner(executor=executor, environ={})
@@ -99,6 +113,33 @@ class CodexOAuthRunnerTests(unittest.TestCase):
 
         with self.assertRaisesRegex(RuntimeError, "invalid structured JSON"):
             runner.invoke("leader", "Return JSON.", {"type": "object"})
+
+    def test_transient_codex_error_event_is_retried_once(self) -> None:
+        calls = 0
+
+        def flaky(command: list[str], **kwargs) -> subprocess.CompletedProcess[str]:
+            nonlocal calls
+            if command[-2:] == ["login", "status"]:
+                return subprocess.CompletedProcess(
+                    command, 0, "Logged in using ChatGPT", ""
+                )
+            calls += 1
+            if calls == 1:
+                event = json.dumps({
+                    "type": "item.completed",
+                    "item": {"type": "error", "message": "temporary unavailable"},
+                })
+                return subprocess.CompletedProcess(command, 0, event, "")
+            output_path = Path(command[command.index("--output-last-message") + 1])
+            output_path.write_text('{"ok": true}', encoding="utf-8")
+            return subprocess.CompletedProcess(command, 0, "", "")
+
+        runner = oauth_codex.CodexOAuthRunner(executor=flaky, environ={})
+
+        result = runner.invoke("leader", "Return JSON.", {"type": "object"})
+
+        self.assertEqual(result, {"ok": True})
+        self.assertEqual(calls, 2)
 
 
 if __name__ == "__main__":

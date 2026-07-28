@@ -64,4 +64,4 @@ The deterministic evaluator is authoritative for game claims. The host model may
 - The six modifier values are explicit in `spine/config.yaml`, but a fresh live proof that the menu UI matches all six values is still required before a scored run.
 - Attach/recovery from an already-running gameplay or level-up screen remains incomplete.
 - The current upstream detector weights cover threats but not a proven gem/elite mapping.
-- A real OAuth leader/follower graph smoke is required after unit tests; a live game smoke is separate evidence and must not be inferred from it.
+- The real OAuth leader/follower graph smoke passes through both Luna roles. A live game smoke is separate evidence and must not be inferred from the no-game smoke.

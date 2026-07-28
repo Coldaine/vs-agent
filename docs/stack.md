@@ -29,6 +29,7 @@ LangGraph supplies durable state transitions, checkpoint/resume, explicit branch
 
 ```powershell
 codex login status
+.venv\Scripts\python.exe spine\smoke_oauth_graph.py
 .venv\Scripts\python.exe spine\run.py `
   --goal "Complete a fixed-condition run and prove survival reached 540 seconds" `
   --thread-id goal-g4

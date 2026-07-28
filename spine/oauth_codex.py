@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass
@@ -55,10 +56,17 @@ class CodexOAuthRunner:
         *,
         executor: Executor = subprocess.run,
         environ: Mapping[str, str] | None = None,
+        executable_resolver: Callable[[str], str | None] = shutil.which,
     ) -> None:
         self.config = config or CodexOAuthConfig()
         self._executor = executor
         self._environ = os.environ if environ is None else environ
+        self._executable = executable_resolver(self.config.executable)
+        if not self._executable:
+            raise RuntimeError(
+                "Codex CLI executable was not found on PATH; ChatGPT Pro OAuth "
+                "cannot be used until Codex is installed"
+            )
         self._login_checked = False
         assert_oauth_only_environment(self._environ)
 
@@ -66,7 +74,7 @@ class CodexOAuthRunner:
         """Verify Codex reports ChatGPT login without inspecting credentials."""
 
         result = self._executor(
-            [self.config.executable, "login", "status"],
+            [self._executable, "login", "status"],
             capture_output=True,
             text=True,
             timeout=self.config.timeout_s,
@@ -103,7 +111,7 @@ class CodexOAuthRunner:
                 schema_path.write_text(json.dumps(schema), encoding="utf-8")
 
             command = [
-                self.config.executable,
+                self._executable,
                 "exec",
                 "--ignore-user-config",
                 "--ignore-rules",
@@ -129,21 +137,31 @@ class CodexOAuthRunner:
                 "and attached image. Return only the requested structured result.\n\n"
                 f"{prompt}"
             )
-            result = self._executor(
-                command,
-                input=guarded_prompt,
-                capture_output=True,
-                text=True,
-                timeout=self.config.timeout_s,
-                check=False,
-                cwd=temp_dir,
-            )
-            if result.returncode != 0:
-                raise RuntimeError(
-                    f"Codex OAuth {role} invocation failed with exit code "
-                    f"{result.returncode}: {result.stderr.strip()}"
+            for attempt in range(2):
+                if output_path.exists():
+                    output_path.unlink()
+                result = self._executor(
+                    command,
+                    input=guarded_prompt,
+                    capture_output=True,
+                    text=True,
+                    timeout=self.config.timeout_s,
+                    check=False,
+                    cwd=temp_dir,
                 )
-            self._reject_tool_activity(result.stdout)
+                if result.returncode != 0:
+                    raise RuntimeError(
+                        f"Codex OAuth {role} invocation failed with exit code "
+                        f"{result.returncode}: {result.stderr.strip()}"
+                    )
+                model_error = self._inspect_event_stream(result.stdout)
+                if model_error is None:
+                    break
+                if attempt == 1:
+                    raise RuntimeError(
+                        f"Codex OAuth {role} reported an error after one retry: "
+                        f"{model_error}"
+                    )
             try:
                 payload = json.loads(output_path.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError) as error:
@@ -157,8 +175,8 @@ class CodexOAuthRunner:
             return payload
 
     @staticmethod
-    def _reject_tool_activity(stdout: str) -> None:
-        """Fail the invocation if Codex used a tool despite the role boundary."""
+    def _inspect_event_stream(stdout: str) -> str | None:
+        """Reject tool calls and return a retryable Codex model error, if any."""
 
         allowed = {"agent_message", "reasoning"}
         for line in stdout.splitlines():
@@ -167,8 +185,19 @@ class CodexOAuthRunner:
             except json.JSONDecodeError:
                 continue
             item = event.get("item")
-            if isinstance(item, dict) and item.get("type") not in allowed:
+            if not isinstance(item, dict):
+                continue
+            item_type = item.get("type")
+            if item_type == "error":
+                return str(
+                    item.get("message")
+                    or item.get("text")
+                    or item.get("error")
+                    or "unspecified Codex model error"
+                )
+            if item_type not in allowed:
                 raise RuntimeError(
                     "Codex OAuth role attempted forbidden tool activity: "
-                    f"{item.get('type')}"
+                    f"{item_type}"
                 )
+        return None

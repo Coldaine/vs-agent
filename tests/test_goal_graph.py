@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -10,6 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "spine"))
 
 from langgraph.checkpoint.memory import InMemorySaver  # noqa: E402
+from langgraph.checkpoint.sqlite import SqliteSaver  # noqa: E402
 
 import goal_graph  # noqa: E402
 
@@ -183,6 +185,34 @@ class GoalGraphTests(unittest.TestCase):
         self.assertEqual(tools.calls.count("prepare"), 1)
 
         resumed = graph.invoke(None, config)
+
+        self.assertEqual(resumed["phase"], "observed")
+        self.assertEqual(tools.calls.count("prepare"), 1)
+        self.assertEqual(model.roles, ["leader", "follower"])
+
+    def test_sqlite_checkpoint_resumes_after_graph_is_rebuilt(self) -> None:
+        model = ScriptedModel()
+        tools = ScriptedTools([
+            {"screen_type": "PLAY", "summary": "safe"},
+            {"screen_type": "RUN_END", "summary": "done"},
+        ])
+        config = {"configurable": {"thread_id": "sqlite-resume"}, "recursion_limit": 30}
+        with tempfile.TemporaryDirectory() as root:
+            database = str(Path(root, "goals.sqlite3"))
+            with SqliteSaver.from_conn_string(database) as checkpointer:
+                first_graph = goal_graph.build_goal_graph(
+                    model, tools, checkpointer, pause_after_observe=True
+                )
+                paused = first_graph.invoke(
+                    goal_graph.initial_state("finish", retries=0), config
+                )
+                self.assertEqual(paused["phase"], "observed")
+
+            with SqliteSaver.from_conn_string(database) as checkpointer:
+                rebuilt_graph = goal_graph.build_goal_graph(
+                    model, tools, checkpointer, pause_after_observe=True
+                )
+                resumed = rebuilt_graph.invoke(None, config)
 
         self.assertEqual(resumed["phase"], "observed")
         self.assertEqual(tools.calls.count("prepare"), 1)
