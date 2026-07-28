@@ -106,7 +106,7 @@
 - [x] **Step 1: Run OAuth preflight:** `codex login status` reported `Logged in using ChatGPT`.
 - [x] **Step 2: Run exact-model smoke:** `gpt-5.6-luna` returned the required marker through `codex exec` and ChatGPT OAuth.
 - [x] **Step 3: Run** `.venv\Scripts\python.exe -m unittest discover -s tests -p "test_*.py" -v` and `.venv\Scripts\python.exe -m compileall -q spine`; 38 tests pass and compilation is clean.
-- [x] **Step 4: Run a graph smoke with fake game tools but the real OAuth leader and follower**; both `gpt-5.6-luna` roles completed and the deterministic evaluator returned `achieved` with `smoke-control` and `smoke-outcome` evidence.
+- [x] **Step 4: Run a graph smoke with fake game tools but the real OAuth leader and follower**; both `gpt-5.6-luna` roles completed and the deterministic evaluator returned `achieved` with `smoke-control` and `smoke-outcome` evidence. A separate real-image OAuth smoke attached the saved gameplay HUD frame; the follower correctly returned `HOLD` because a level-up screen was active.
 - [x] **Step 5: Keep the live control-window smoke unclaimed.** The game is not safely attachable yet, and the six modifier states still need live UI verification. These remain G0 work documented in `docs/architecture.md` and are not inferred from framework tests.
 - [x] **Step 6: Mark the framework/OAuth plan complete after promoting lasting facts into `docs/architecture.md`.** Keep this requested plan artifact through user review; delete it in a later accepted cleanup rather than during the delivery commit.
 - [x] **Step 7: Push the branch** after validation so the durable work is preserved remotely. The implementation is on `origin/pr/rename-pilot-planner`; no pull request was opened automatically.
