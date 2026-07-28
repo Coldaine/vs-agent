@@ -46,8 +46,9 @@ distillation would learn an incoherent mixture.
 
 Three measured problems:
 
-1. **Latency variance, not mean latency, kills you.** API endpoints
-   (and even local servers under load) have p95s 2-5x their mean.
+1. **Latency variance, not mean latency, kills you.** Remote model turns
+   through the ChatGPT OAuth-backed Codex runtime (and even local servers under
+   load) can have p95s 2-5x their mean.
    One slow call while surrounded = death. Hence the reflex floor.
 2. **VLMs are weak on dense, cluttered scenes.** Late-game VS is
    hundreds of sprites plus particle effects. Small detectors (YOLO)

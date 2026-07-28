@@ -135,10 +135,10 @@ be able to say why its justification no longer holds — otherwise don't.
   by the runtime — the runtime doesn't know why it died, and letting
   it guess contaminates the ledger.
 
-## Seams (intentionally NotImplementedError)
+## Runtime seams
 
-io_adapter, model_client, perceive raise instead of returning stubs:
-a stub that returns plausible-looking garbage would let the system
-"run" while producing silently meaningless traces. Failing loud at
-the seam is the entire point of the seam.
-
+`io_adapter` and `perceive` fail loudly when capture, input, OCR, or weights are
+unavailable. `oauth_codex` fails closed unless Codex reports a ChatGPT login and
+rejects inherited model API keys. `game_tools` bounds model proposals through
+the deterministic controller. Plausible-looking fallback data or an API-backed
+provider fallback would silently invalidate traces, so neither is permitted.

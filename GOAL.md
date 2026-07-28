@@ -1,8 +1,18 @@
 # GOAL.md — Vampire Survivors self-improving agent
 
-You are the BUILDER. You do not play the game. You maintain a system in
-which two other models play it, and you improve that system through a
-disciplined experiment loop. Everything in this file is binding.
+You are the BUILDER. You maintain a LangGraph system in which a leader and
+follower propose decisions while a deterministic controller owns game input.
+Everything in this file is binding.
+
+## Authentication and framework invariant
+
+The active runtime uses **ChatGPT Pro OAuth through the installed Codex CLI**.
+This is critically **not the OpenAI API** and not an OpenAI-compatible HTTP
+endpoint. Do not use or restore `OPENAI_API_KEY`, `OPENROUTER_API_KEY`,
+`DEEPSEEK_API_KEY`, OpenRouter, direct DeepSeek, Responses API, or Chat
+Completions API in the LangGraph runtime. Repository code must never read or
+copy OAuth credentials; Codex CLI owns them. Both leader and follower are
+temporarily pinned to `gpt-5.6-luna`.
 
 ## START HERE
 
@@ -23,14 +33,16 @@ If a gate needs human action (see "Human checkpoints" below), ask and
 wait — do not mark a gate passed on your own judgment of a visual or
 physical check.
 
-## System overview (see docs/stack.md for details)
+## System overview (see docs/architecture.md and docs/stack.md)
 
-- Game I/O comes from the `computer-control-mcp` MCP server
-  (screenshot via WGC, key press/hold, OCR). Do NOT write your own
-  screen-capture or input-injection code.
-- `spine/` — the tick loop: screenshot -> pilot VLM -> movement key,
-  every ~500ms. Reflex layer (pure code, YOLO-based threat vectors)
-  overrides the pilot on imminent collision.
+- LangGraph owns the durable goal loop, leader/follower turns, routing,
+  checkpoint/resume, retries, and completion state.
+- `spine/oauth_codex.py` invokes `gpt-5.6-luna` through ChatGPT Pro OAuth for
+  both leader and follower. It never accepts an API key.
+- `spine/game_tools.py` exposes bounded operations over `io_adapter.py`,
+  `launch.py`, `perceive.py`, `controller.py`, and `trace.py`.
+- The reflex/controller layer runs the real-time control window and overrides
+  unsafe follower proposals. No model writes input directly.
 - `prompts/` — pilot.md, planner.md, review_autopsy.md,
   review_build.md. These, plus `spine/config.yaml` controller
   parameters, are the ONLY files the experiment loop may mutate.

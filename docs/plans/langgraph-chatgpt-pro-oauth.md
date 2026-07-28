@@ -87,11 +87,11 @@
 **Interfaces:**
 - Produces: one unambiguous source of truth for framework ownership, authentication, role boundaries, launch commands, and migration status.
 
-- [ ] **Step 1: Replace stale endpoint claims** with the explicit rule: **ChatGPT Pro OAuth via Codex CLI only; never an OpenAI API key or compatible HTTP endpoint for this LangGraph path.**
-- [ ] **Step 2: Document** LangGraph as orchestration runtime, `gpt-5.6-luna` as temporary leader and follower, and `spine/controller.py` as deterministic sole input writer.
-- [ ] **Step 3: Document operator commands** for OAuth preflight, unit tests, a no-game model smoke test, and a bounded live goal run.
-- [ ] **Step 4: Run an authority-flow pass** across `GOAL.md`, `docs/architecture.md`, `AGENTS.md`, `HANDOFF.md`, and this plan; remove contradictions.
-- [ ] **Step 5: Commit** with `git commit -m "docs: adopt LangGraph and ChatGPT Pro OAuth runtime"`.
+- [x] **Step 1: Replace stale endpoint claims** with the explicit rule: **ChatGPT Pro OAuth via Codex CLI only; never an OpenAI API key or compatible HTTP endpoint for this LangGraph path.**
+- [x] **Step 2: Document** LangGraph as orchestration runtime, `gpt-5.6-luna` as temporary leader and follower, and `spine/controller.py` as deterministic sole input writer.
+- [x] **Step 3: Document operator commands** for OAuth preflight, unit tests, a no-game model smoke test, and a bounded live goal run.
+- [x] **Step 4: Run an authority-flow pass** across `GOAL.md`, `docs/architecture.md`, `AGENTS.md`, `HANDOFF.md`, and this plan; remove contradictions.
+- [x] **Step 5: Commit** with `git commit -m "docs: adopt LangGraph and ChatGPT Pro OAuth runtime"`.
 
 ### Task 5: Verification and migration evidence
 
