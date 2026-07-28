@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -18,6 +19,7 @@ _RESTRICTED_CONFIG = {
     "web_search": "disabled",
     "features": {"shell_tool": False},
 }
+_THREAD_HANDLE_VERSION = "codex-sdk-v1"
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,8 +104,17 @@ class CodexAgentClient:
         if self._sdk is None:
             raise RuntimeError("Codex SDK client did not start")
 
+        sdk_thread_id = None
+        if thread_id is not None:
+            owner_role, sdk_thread_id = _decode_thread_handle(thread_id)
+            if owner_role != role:
+                raise RuntimeError(
+                    f"Codex thread handle belongs to {owner_role!r}, not role {role!r}; "
+                    "resuming it under a different role is forbidden"
+                )
+
         async with self._thread_lock:
-            thread = await self._role_thread(role, thread_id)
+            thread = await self._role_thread(role, sdk_thread_id)
         input_value: str | list[Any] = prompt
         if image_path is not None:
             input_value = [prompt, self._image_factory(str(image_path))]
@@ -116,7 +127,7 @@ class CodexAgentClient:
         payload = _parse_final_response(turn.final_response, schema)
         return CodexInvocation(
             payload=payload,
-            thread_id=thread.id,
+            thread_id=_encode_thread_handle(role, thread.id),
             turn_id=turn.id,
             usage=_usage_as_dict(turn.usage),
         )
@@ -191,3 +202,31 @@ def _usage_as_dict(usage: Any) -> dict | None:
     if hasattr(usage, "model_dump"):
         return usage.model_dump(mode="json")
     raise RuntimeError("Codex SDK returned unsupported usage metadata")
+
+
+def _encode_thread_handle(role: str, sdk_thread_id: str) -> str:
+    return ".".join(
+        (_THREAD_HANDLE_VERSION, _handle_part(role), _handle_part(sdk_thread_id))
+    )
+
+
+def _decode_thread_handle(handle: str) -> tuple[str, str]:
+    parts = handle.split(".")
+    if len(parts) != 3 or parts[0] != _THREAD_HANDLE_VERSION:
+        raise ValueError("thread_id must be a role-bound Codex thread handle")
+    try:
+        role, sdk_thread_id = (_read_handle_part(parts[1]), _read_handle_part(parts[2]))
+    except (UnicodeDecodeError, ValueError) as error:
+        raise ValueError("thread_id must be a valid role-bound Codex thread handle") from error
+    if not role or not sdk_thread_id:
+        raise ValueError("thread_id must be a valid role-bound Codex thread handle")
+    return role, sdk_thread_id
+
+
+def _handle_part(value: str) -> str:
+    return base64.urlsafe_b64encode(value.encode("utf-8")).decode("ascii").rstrip("=")
+
+
+def _read_handle_part(value: str) -> str:
+    padded = value + "=" * (-len(value) % 4)
+    return base64.b64decode(padded, altchars=b"-_").decode("utf-8")
