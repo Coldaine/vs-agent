@@ -23,7 +23,7 @@ Live keyboard/window control is intentionally disabled so it cannot bypass
 | `docs/plans/vs_agent_harness_cloud.plan.md` | Cloud agent plan artifact |
 | `pyproject.toml` / `requirements-harness.txt` | Optional install surface for this tree only |
 
-### SAM 3 (Docker)
+## SAM 3 (Docker)
 
 Don’t install torch/sam3 into the spine venv. From `sam3_service/`:
 

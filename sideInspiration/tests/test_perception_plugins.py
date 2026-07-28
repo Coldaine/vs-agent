@@ -108,3 +108,61 @@ def test_sam3_server_validates_segment_inputs():
     with pytest.raises(HTTPException) as error:
         _decode_image("not-base64")
     assert error.value.status_code == 400
+
+
+def test_try_build_sam_retries_after_load_error(monkeypatch):
+    import httpx
+
+    from vs_harness.perception.sam3 import try_build_sam
+
+    health_calls = 0
+    timeouts = []
+
+    class _Response:
+        def __init__(self, payload):
+            self._payload = payload
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return self._payload
+
+    class _Client:
+        def __init__(self, timeout):
+            timeouts.append(timeout)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def get(self, url):
+            nonlocal health_calls
+            assert url.endswith("/health")
+            health_calls += 1
+            if health_calls == 1:
+                return _Response({"ready": False, "model_loaded": False, "load_error": "transient"})
+            return _Response({"ready": True, "model_loaded": True, "load_error": None})
+
+        def post(self, url):
+            assert url.endswith("/v1/warmup")
+            return _Response({"ok": True, "model_loaded": True})
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(httpx, "Client", _Client)
+    backend = try_build_sam(
+        {
+            "perception": {
+                "sam3_url": "http://test",
+                "sam3_warmup_timeout_s": 17,
+            }
+        }
+    )
+
+    assert backend is not None
+    assert health_calls == 2
+    assert timeouts[:2] == [2.0, 17.0]

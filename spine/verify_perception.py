@@ -45,7 +45,8 @@ def verify(frames_dir: str, n: int = 20):
         total_checks = 0
         
         for fp in labels:
-            if not os.path.exists(fp): continue
+            if not os.path.exists(fp):
+                continue
             frame = perceive.load_image(fp)
             summary = perceive.state_summary(frame)
             gt = labels[fp]

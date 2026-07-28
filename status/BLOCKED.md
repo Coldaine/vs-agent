@@ -1,5 +1,12 @@
-# BLOCKED — deterministic menu navigation failed
+# CLEARED — selector calibration and live launch verified (2026-07-28)
 
-Unable to reach Mad Forest: expected one of ['STAGE_SELECT'], got CHARACTER_SELECT: 'ROCKSTAR FAVOURITE MAX WEAPONS POWER CREEP GOLDEN EGGS EGGS: 20 SKIN (I ENTER CO-OP | FILTER: OFF GENNARO BELPAESE FAVOURITE = A MAX WEAPONS [6] POWER CREEP EE. GOLDEN EGGS EO” EGG'
+The earlier blocker is obsolete. Live keyboard navigation selected Antonio,
+entered the separate Stage Selection screen, selected Mad Forest, disabled
+Arcana, and started a run; `status/g0_gameplay_hud.jpg` shows the in-game HUD
+at 00:16. This was a calibration run, not a scored evaluation: Hurry and
+Limit Break were enabled and the exact modifier baseline is not yet configured.
 
-Evidence frame: `status/stuck.png`. Do not send further menu input until this state is reviewed.
+The observed WGC-frame to Windows hit-test transform is 1.25x at the current
+fixed display. It is calibration evidence, not a general assumption. The
+remaining G0 work is attach/recovery plus the two-second movement verification;
+see `docs/plans/g0-live-followup.md`.

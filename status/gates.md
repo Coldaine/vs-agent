@@ -2,6 +2,21 @@
 
 Append-only record of gate progress. Evidence-based (GOAL.md).
 
+## G0 live-control recalibration — 2026-07-28
+
+**Verdict:** IN PROGRESS — prior selector/input blocker cleared; G0 is not
+yet passed.
+
+- Live keyboard route selected `Antonio Belpaese (Legacy)` and `Confirm`
+  opened the separate Stage Selection screen.
+- Mad Forest was selected by bounded directional navigation; Arcana was
+  disabled through the calibrated 1.25x WGC-frame-to-hit-test transform.
+- Start reached a live HUD and level-up overlay at 00:16
+  (`status/g0_gameplay_hud.jpg`).
+- This was a calibration run only. Hurry and Limit Break were enabled, so the
+  modifier baseline is not yet a fixed evaluation condition. Attach/recovery
+  and the two-second movement evidence also remain.
+
 ## Session 1 — seam fill + G0 attempt (2026-07-23)
 
 BUILDER work completed (code, no live env required):
@@ -118,7 +133,8 @@ doppler run -- python spine/run.py --reflex-only
 - **Virtual gamepad lifecycle hardened**: `spine/io_adapter.py` now verifies ViGEm/XInput enumeration by polling XInput slots instead of relying on a fixed sleep, recreates the virtual Xbox 360 controller on bounded input failures, and closes it explicitly from `run.py`, `verify_g0.py`, and the new `spine/verify_gamepad.py` diagnostic.
 - **Config**: replaced `gamepad_ready_delay_s` with `gamepad_ready_timeout_s`, `gamepad_create_retries`, and `gamepad_recreate_on_error`.
 - **Validation**: `python -m compileall spine` passed; `python spine/verify_gamepad.py` returned `{"ok": true, "before": [], "during": [0], "recoveries": 0}`.
-- **Live menu blocker unchanged**: `status/BLOCKED.md` still requires review before further menu input.
+- **Historical note**: the earlier live menu blocker was recorded before the verified nav-agent path;
+  current blocker state must be read from `status/BLOCKED.md` and the latest G0 result below.
 
 ## G0 Plumbing Gate — 2026-07-23 23:28:03
 **Verdict:** FAILED
@@ -189,3 +205,138 @@ doppler run -- python spine/run.py --reflex-only
 - key_diff: 0.911
 - key_ocr_before: a@  ae Character Selection 7  -.  &  me oreres  = ess) (? 1 :  | ry an : ah  ® : . : gy A | 2 Ss Bio ¢: »  Bit | ftw) ¥E 2  a  fe 2S 4) a9  i _ ' a  ms y ial 
 - key_ocr_after: wt  ; ie  ’ ? e +35% oy Sy oS a oF ay +420% ar : Bla oS ol ole & +1 5 3 a - a eZ, ey | a- qi a +50% ' bx 30% a | -  +50% ’ ied +4 re 4 a oI) +10 | comer ser | :  ft a = jo dit 
+
+## G0 Plumbing Gate — 2026-07-28 03:08:51
+
+**Verdict:** FAILED
+
+**Results:**
+- launch: PASS
+- capture: PASS
+- keys: PASS
+- menu_macro: FAIL (expected one of ['CHARACTER_SELECT', 'MAIN_MENU', 'STAGE_SELECT', 'TITLE', 'WARNING'], got UNKNOWN: 'ROCKSTAR | 28029 | — | FILTER: OFF ® : G ¢ & CS =) A AED A | GEO 6 IB BEEEE EERE ES ERED : : DB A EC) BS) 5 | SS AL AR AE AF É FE RAMBA :| FI W ~ ; VV] : |S 1G OFLF EO) IE | O R, X')
+
+**Evidence:**
+- launch_state: CHARACTER_SELECT
+- capture_resolution: 2562x1479
+- capture_mean_brightness: 92.02
+- key_diff: 0.0276
+- key_ocr_before: Character Selection a: fal al B14 | | S| fi a) BE Of w | =oF B= - =~} # a # R J 4 40 $ we Rami ia sls * “ F a = OU Al @) ec & Fk pa Ambrojoe | ) — § 1 (mwenons:6 | ||) gs ba be Fy 
+- key_ocr_after: Rockstar | 28029 | — | : Ne a FR : if ua ve ad & ef Ramba | : B® Go Mel va | & ' ° : Ambrojoe i >. & r oF “h — _ 7) a : A) 7) «| 22? 22? 2??? = i cy ] eam ff LS ee, “ (=) 
+
+## G0 Plumbing Gate — 2026-07-28 03:13:25
+
+**Verdict:** FAILED
+
+**Results:**
+- blocked: BLOCKED
+
+**Evidence:**
+- blocked_status: status/BLOCKED.md is active
+
+## G0 Plumbing Gate — 2026-07-28 03:13:56
+
+**Verdict:** FAILED
+
+**Results:**
+- launch: PASS
+- capture: PASS
+- keys: PASS
+- menu_macro: FAIL (expected one of ['STAGE_SELECT'], got CHARACTER_SELECT: 'ROCKSTAR ¥ CLOCK SPEED ES) +| XP BONUS 28029 STAGE SELECTION GREEN ACRES FATE CHANGES BY THE MINUTE IN A REALM WHERE MORTALS CAN ONLY TRESPASS. WHAT EEL REWARDS AWAIT THOSE WHO CHA')
+
+**Evidence:**
+- launch_state: CHARACTER_SELECT
+- capture_resolution: 2562x1479
+- capture_mean_brightness: 68.26
+- key_diff: 0.0253
+- key_ocr_before: — 7 Rockstar 28029 L | = i r. ‘ , ae) Stage Selection " Moongolow Legend tells of a city swallowed by the r fis i sea under a full moon’s callous watch. F | Pai Home to mysteries u
+- key_ocr_after: Rockstar &: 28029 (_ mx } _ L . , re Stage Selection I 5 . 1 "a Fate chan by th inute i 1m F ‘ate ges by the minute in a rea. . ASHORE SionaIhL where mortals can only trespass. Wha
+
+## G0 Plumbing Gate — 2026-07-28 03:14:02
+
+**Verdict:** FAILED
+
+**Results:**
+- blocked: BLOCKED
+
+**Evidence:**
+- blocked_status: status/BLOCKED.md is active
+
+## G0 Plumbing Gate — 2026-07-28 03:14:40
+
+**Verdict:** FAILED
+
+**Results:**
+- launch: PASS
+- capture: PASS
+- keys: PASS
+- menu_macro: PASS
+- move: FAIL (expected one of ['IN_GAME'], got STAGE_SELECT: 'ROCKSTAR STAGE SELECTION GREEN ACRES (ENOIBLENICYE THE BONE ZONE <——2CHALLENGES WHITEOUT FATE CHANGES BY THE MINUTE IN A REALM WHERE MORTALS CAN ONLY TRESPASS. WHAT REWARDS AWAIT T')
+
+**Evidence:**
+- launch_state: STAGE_SELECT
+- capture_resolution: 2562x1479
+- capture_mean_brightness: 72.17
+- key_diff: 0.0645
+- key_ocr_before: — 7 Rockstar &: 28029 a _ at q , ae) Stage Selection $$ - A Fate changes by the minute in a realm rm " Sieat aeses where mortals can only trespass. What Eel rewards await those who
+- key_ocr_after: Rockstar & 28029 ack io” oO Stage Selection Green Acres Fate changes by the minute in a realm where mortals can only trespass. What oft rs or] rewards await those who challenge its
+- stage_text: ROCKSTAR STAGE SELECTION GREEN ACRES (ENOIBLENICYE THE BONE ZONE <——2CHALLENGES WHITEOUT FATE CHANGES BY THE MINUTE IN A REALM WHERE MORTALS CAN ONLY TRESPASS. WHAT REWARDS AWAIT T
+
+## G0 Plumbing Gate — 2026-07-28 05:16:02
+
+**Verdict:** FAILED
+
+**Results:**
+- launch: FAIL (expected one of ['CHARACTER_SELECT', 'MAIN_MENU', 'STAGE_SELECT', 'TITLE'], got WARNING: 'PHOTOSENSITIVITY WARNING THIS GAME CONTAINS BRIGHT FLASHING LIGHTS. PLEASE IMMEDIATELY STOP PLAYING AND CONSULT A DOCTOR IF YOU EXPERIENCE LIGHTHEADEDNESS, ALTERED VISION, EYE OR F')
+
+**Evidence:**
+
+## G0 Plumbing Gate — 2026-07-28 05:18:14
+
+**Verdict:** FAILED
+
+**Results:**
+- launch: PASS
+- capture: PASS
+- keys: PASS
+- menu_macro: FAIL (expected one of ['CHARACTER_SELECT', 'MAIN_MENU', 'STAGE_SELECT', 'TITLE', 'WARNING'], got UNKNOWN: 'ROCKSTAR | 28029 | — | & A B A AMBROJOE ® : G ¢ & CS =) A AED A | GEO 6 IB BEEEE EERE ES ERED ROCKSTAR | 28029 | (_MERCOW , : WL & AL BL BL E 4 OA AE A É A RAMBA | W ~ ; = : B® GO ')
+
+**Evidence:**
+- launch_state: CHARACTER_SELECT
+- capture_resolution: 2562x1472
+- capture_mean_brightness: 91.26
+- key_diff: 0.0277
+- key_ocr_before: Rockstar ([& 22) —) =p Character Selection & fit |) ft a |) FE @  | S| fi a) BE Of is .— ! -—% bee 1 - =~} # a # R J 4 40 . wis Ramba a ~~ - Gst6 b: : F a — OU Al @) ec & Fk ! 7 Am
+- key_ocr_after: |  : | & a) So) Rl y | Gx oh Ae af & Ramba .  : ¢ ir  "ae = ] : B® Go Mel va | & : ° : Ambrojoe 4 i  il me | OCeroes| E 2 : , a 22? 22? 22? Random " 2 momen | |  2 = 
+
+## G0 Plumbing Gate — 2026-07-28 05:18:56
+
+**Verdict:** FAILED
+
+**Results:**
+- launch: PASS
+- capture: PASS
+- keys: FAIL (main-menu highlight diff too low: 0.0051)
+
+**Evidence:**
+- launch_state: CHARACTER_SELECT
+- capture_resolution: 2562x1472
+- capture_mean_brightness: 90.72
+
+## G0 Plumbing Gate — 2026-07-28 05:24:14
+
+**Verdict:** FAILED
+
+**Results:**
+- launch: PASS
+- capture: PASS
+- keys: PASS
+- menu_macro: FAIL (could not select fixed eval character 'Antonio' after bounded character-menu search; last OCR: "ROCKSTAR ENTER CO-OP FILTER: OFF A CHARACTER SELECTION | FILTER: OFF | I ' LS CR * | 5 = I RE TH ; A I — FS")
+
+**Evidence:**
+- launch_state: CHARACTER_SELECT
+- capture_resolution: 2562x1472
+- capture_mean_brightness: 90.72
+- key_diff: 0.0051
+- key_ocr_before: Rockstar | 28029 | (_mercow ,  : wl & al Bl Bl e 4 oa Ae a é a Ramba | w ~ ; = : B® Go Mel va | 3 o 7 } ° Ambrojoe s ae > BA @ ie) @. ¢ - 22? 22? 22? Random = mmm (6 EO) aS Cee 
+- key_ocr_after: |  : | & a) So) Rl y | Gx oh Ae af & Ramba .  : ¢ ir  "ae = ] : B® Go Mel va | & : ° : Ambrojoe 4 i  il me | OCeroes| E 2 : , a 22? 22? 22? Random " 2 momen | |  2 = 

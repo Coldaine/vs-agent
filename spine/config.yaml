@@ -24,17 +24,31 @@ gamepad_ready_timeout_s: 3.0
 gamepad_create_retries: 3
 gamepad_recreate_on_error: true
 gamepad_button_hold_s: 0.3
-# This save starts on Gennaro (row 2, col 1); Antonio is row 1, col 2.
-antonio_selection_path: [up, right]
+# Character selection persists between attempts. Search is bounded and every
+# move is OCR-checked before confirming the fixed Antonio evaluation choice.
+character_search_directions: [up, left, right, down]
+character_search_max_steps: 32
+# Calibrated on the G0 fixed 2562x1472 capture: click the grid scrollbar top,
+# then Antonio's card. The detail-panel OCR is the proof before confirmation.
+character_scroll_top_frame: [1786, 355]
+character_target_frame: [1137, 379]
+character_selected_label_region: [720, 1200, 1800, 1470]
+# Antonio card focus corners derived from paired native 2562x1472 captures.
+character_target_rect: [1015, 308, 228, 237]
+# The saved stage persists across attempts.  Search is bounded and every
+# transition is OCR-checked before the run-start guard is allowed to confirm.
+stage_search_directions: [up, down]
+stage_search_max_steps: 32
 # WGC frame coordinates on the physical left monitor (origin -2560, 0).
 wgc_monitor_origin: [-2560, 0]
-mad_forest_frame_point: [1690, 285]
-confirm_frame_point: [1640, 1380]
 # DXCam output zero is the primary display. This game window runs on output 1.
 capture_output_idx: 1
 capture_min_dimensions: [640, 480]
 capture_retries: 3
-key_diff_threshold: 0.02
+# G0 character-grid cursor changes affect a small fraction of the 2562x1472
+# frame. Calibrated from the live 0.0051 mean pixel delta; retain margin while
+# still requiring a visible screenshot change.
+key_diff_threshold: 0.004
 movement_diff_threshold: 0.1
 tesseract_cmd: "C:/Program Files/Tesseract-OCR/tesseract.exe"
 menu_ocr_config: "--psm 6"

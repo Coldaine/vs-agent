@@ -59,9 +59,9 @@ class Sam3HttpPerception(PerceptionBackend):
         self._client.close()
 
     def _segment(self, frame_bgr: np.ndarray, prompts: list[str]) -> dict[str, Any]:
-        ok, buf = cv2.imencode(".jpg", frame_bgr, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
+        ok, buf = cv2.imencode(".png", frame_bgr)
         if not ok:
-            raise RuntimeError("failed to jpeg-encode frame for sam3 service")
+            raise RuntimeError("failed to png-encode frame for sam3 service")
         payload = {
             "image_b64": base64.b64encode(buf.tobytes()).decode("ascii"),
             "prompts": prompts,
@@ -80,7 +80,11 @@ class Sam3HttpPerception(PerceptionBackend):
         prompts = list(
             dict.fromkeys([*self.enemy_prompts, *self.gem_prompts, *self.player_prompts])
         )
-        data = self._segment(frame_bgr, prompts)
+        try:
+            data = self._segment(frame_bgr, prompts)
+        except (httpx.HTTPError, RuntimeError, ValueError) as exc:
+            logger.warning("sam3 sidecar call failed: %s", exc)
+            data = {}
         per = data.get("per_prompt_png_b64") or {}
 
         def or_prompts(keys: list[str]) -> np.ndarray:
@@ -92,8 +96,8 @@ class Sam3HttpPerception(PerceptionBackend):
             return out
 
         threat = or_prompts(self.enemy_prompts)
-        if not threat.any() and data.get("union_png_b64"):
-            # Fallback if server is older and has no per_prompt map
+        if not per and data.get("union_png_b64"):
+            # Fallback only when the server lacks per-prompt results.
             threat = _decode_mask_png(data["union_png_b64"], shape)
 
         gems = or_prompts(self.gem_prompts)
@@ -132,12 +136,14 @@ def try_build_sam(cfg: dict[str, Any]) -> PerceptionBackend | None:
             r = c.get(f"{base_url}/health")
             r.raise_for_status()
             body = r.json()
-            if body.get("load_error"):
-                return None
-            if not body.get("ready", body.get("model_loaded", False)):
-                warmup = c.post(f"{base_url}/v1/warmup")
-                warmup.raise_for_status()
-                body = c.get(f"{base_url}/health").json()
+            if body.get("load_error") or not body.get(
+                "ready", body.get("model_loaded", False)
+            ):
+                warmup_timeout = float(perc.get("sam3_warmup_timeout_s", 900.0))
+                with httpx.Client(timeout=warmup_timeout) as warmup_client:
+                    warmup = warmup_client.post(f"{base_url}/v1/warmup")
+                    warmup.raise_for_status()
+                    body = warmup_client.get(f"{base_url}/health").json()
             if not body.get("model_loaded") or body.get("load_error"):
                 return None
     except Exception as exc:  # noqa: BLE001

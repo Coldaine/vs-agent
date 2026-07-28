@@ -53,11 +53,22 @@ physical check.
      screenshot diff that the menu highlight moved. If not, try the
      alternate injection path once; if still dead, write
      status/BLOCKED.md for the human.
-  d. MENU MACRO: spine/launch.py navigates main menu -> Antonio ->
-     Mad Forest via a fixed key sequence with an OCR checkpoint after
-     each step (expected screen text), not blind sleeps.
-  e. MOVE CHECK: in-game, send a movement key for 2s; verify player
-     position changed between frames. All five checks log evidence to
+  d. MENU MACRO: spine/launch.py navigates the observed two-screen route:
+     main menu -> Character Selection -> Antonio -> Confirm -> Stage
+     Selection -> Mad Forest -> Start. It must verify the selected-card
+     focus and the selected-stage focus; text merely appearing in a list is
+     not evidence of selection. Menu inputs are bounded and checkpointed,
+     not blind sleeps.
+  e. INPUT CALIBRATION: WGC capture coordinates and Windows hit-test
+     coordinates are independently calibrated and recorded. At the current
+     fixed display this is a 1.25x frame-to-hit-test transform; any changed
+     resolution, DPI, monitor, or capture backend invalidates the calibration.
+  f. RECOVERY / ATTACH: a running episode can attach to an already-live
+     in-game or level-up screen without replaying the menu macro. It must
+     neutralize first, identify the live state, and hand level-up choice and
+     movement back to the controller.
+  g. MOVE CHECK: in-game, send a movement key for 2s; verify player
+     position changed between frames. All checks log evidence to
      status/gates.md. G0 passes with zero human involvement unless a
      check fails after its one retry.
 - G1 MOVEMENT: blind reflex bot holds a strafe pattern and survives
@@ -148,8 +159,10 @@ model understand what we ask and answer reliably"; Loop C answers
   prompts. Write docs/analysis/plateau.md (dominant failure type,
   what was tried, what structural change might help), then attempt
   exactly ONE structural change as the next experiment.
-- Eval conditions are FIXED: Mad Forest, Antonio, no arcanas, default
-  modifiers. Never change eval conditions and compare scores across
+- Eval conditions are FIXED: Mad Forest, Antonio, and an explicit modifier
+  baseline. `default modifiers` is not an executable condition: config must
+  name the enabled/disabled state of Hyper, Hurry, Arcanas, Limit Break,
+  Inverse, and Endless before any scored run. Never change eval conditions and compare scores across
   the change.
 - Never modify the game installation, episodes/, eval_set/,
   experiments.log, or theories.jsonl retroactively (theory status

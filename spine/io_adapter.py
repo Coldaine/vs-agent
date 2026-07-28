@@ -90,6 +90,10 @@ def _xinput():
     for name in ("xinput1_4.dll", "xinput1_3.dll", "xinput9_1_0.dll"):
         try:
             _XINPUT = ctypes.WinDLL(name)
+            _XINPUT.XInputGetState.argtypes = [
+                wintypes.DWORD, ctypes.POINTER(_XINPUT_STATE)
+            ]
+            _XINPUT.XInputGetState.restype = wintypes.DWORD
             return _XINPUT
         except OSError:
             continue
@@ -143,7 +147,12 @@ class IOAdapter:
             self._create_gamepad()
 
     def _create_gamepad(self) -> None:
-        import vgamepad as vg
+        try:
+            import vgamepad as vg
+        except Exception as error:
+            raise GamepadUnavailableError(
+                f"vgamepad is unavailable: {error}"
+            ) from error
         self._vg = vg
         attempts = max(1, self._gamepad_create_retries)
         timeout_s = max(0.1, self._gamepad_ready_timeout_s)
