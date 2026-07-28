@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import base64
 import json
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -19,7 +18,6 @@ _RESTRICTED_CONFIG = {
     "web_search": "disabled",
     "features": {"shell_tool": False},
 }
-_THREAD_HANDLE_VERSION = "codex-sdk-v1"
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,6 +40,7 @@ class CodexAgentClient:
         image_factory: Callable[[str], Any] = LocalImageInput,
         sandbox: Sandbox = Sandbox.read_only,
         approval_mode: ApprovalMode = ApprovalMode.deny_all,
+        thread_bindings: Mapping[str, str] | None = None,
     ) -> None:
         self._sdk_factory = sdk_factory
         self._image_factory = image_factory
@@ -52,7 +51,15 @@ class CodexAgentClient:
         self._closed = False
         self._lifecycle_lock = asyncio.Lock()
         self._thread_lock = asyncio.Lock()
-        self._thread_roles: dict[str, str] = {}
+        self._thread_bindings = dict(thread_bindings or {})
+        if len(set(self._thread_bindings.values())) != len(self._thread_bindings):
+            raise ValueError("thread bindings must not assign one SDK thread to multiple roles")
+
+    @property
+    def thread_bindings(self) -> dict[str, str]:
+        """Return the role-to-SDK-thread bindings to persist in checkpoint state."""
+
+        return dict(self._thread_bindings)
 
     async def start(self) -> None:
         """Enter the SDK once and confirm it is using the existing ChatGPT login."""
@@ -104,17 +111,8 @@ class CodexAgentClient:
         if self._sdk is None:
             raise RuntimeError("Codex SDK client did not start")
 
-        sdk_thread_id = None
-        if thread_id is not None:
-            owner_role, sdk_thread_id = _decode_thread_handle(thread_id)
-            if owner_role != role:
-                raise RuntimeError(
-                    f"Codex thread handle belongs to {owner_role!r}, not role {role!r}; "
-                    "resuming it under a different role is forbidden"
-                )
-
         async with self._thread_lock:
-            thread = await self._role_thread(role, sdk_thread_id)
+            thread = await self._role_thread(role, thread_id)
         input_value: str | list[Any] = prompt
         if image_path is not None:
             input_value = [prompt, self._image_factory(str(image_path))]
@@ -127,7 +125,7 @@ class CodexAgentClient:
         payload = _parse_final_response(turn.final_response, schema)
         return CodexInvocation(
             payload=payload,
-            thread_id=_encode_thread_handle(role, thread.id),
+            thread_id=thread.id,
             turn_id=turn.id,
             usage=_usage_as_dict(turn.usage),
         )
@@ -145,21 +143,37 @@ class CodexAgentClient:
         if thread_id is not None:
             self._assert_thread_role(thread_id, role)
             thread = await self._sdk.thread_resume(thread_id, **self._thread_options())
-            self._assert_thread_role(thread.id, role)
-            self._thread_roles[thread_id] = role
+            if thread.id != thread_id:
+                raise RuntimeError("Codex SDK resumed an unexpected thread ID")
         else:
             thread = await self._sdk.thread_start(**self._thread_options())
-            self._assert_thread_role(thread.id, role)
-        self._thread_roles[thread.id] = role
+        self._record_thread_role(thread.id, role)
         return thread
 
     def _assert_thread_role(self, thread_id: str, role: str) -> None:
-        owner = self._thread_roles.get(thread_id)
-        if owner is not None and owner != role:
+        owner = self._role_for_thread(thread_id)
+        if owner is None:
+            raise RuntimeError("Codex thread ID is not registered for checkpoint resume")
+        if owner != role:
             raise RuntimeError(
                 f"Codex thread {thread_id!r} belongs to {owner!r}, not role {role!r}; "
                 "resuming it under a different role is forbidden"
             )
+
+    def _record_thread_role(self, thread_id: str, role: str) -> None:
+        owner = self._role_for_thread(thread_id)
+        if owner is not None and owner != role:
+            raise RuntimeError(
+                f"Codex thread {thread_id!r} belongs to {owner!r}, not role {role!r}"
+            )
+        self._thread_bindings[role] = thread_id
+
+    def _role_for_thread(self, thread_id: str) -> str | None:
+        return next(
+            (role for role, bound_thread_id in self._thread_bindings.items()
+             if bound_thread_id == thread_id),
+            None,
+        )
 
 
 def _is_chatgpt_managed_account(metadata: Any) -> bool:
@@ -202,31 +216,3 @@ def _usage_as_dict(usage: Any) -> dict | None:
     if hasattr(usage, "model_dump"):
         return usage.model_dump(mode="json")
     raise RuntimeError("Codex SDK returned unsupported usage metadata")
-
-
-def _encode_thread_handle(role: str, sdk_thread_id: str) -> str:
-    return ".".join(
-        (_THREAD_HANDLE_VERSION, _handle_part(role), _handle_part(sdk_thread_id))
-    )
-
-
-def _decode_thread_handle(handle: str) -> tuple[str, str]:
-    parts = handle.split(".")
-    if len(parts) != 3 or parts[0] != _THREAD_HANDLE_VERSION:
-        raise ValueError("thread_id must be a role-bound Codex thread handle")
-    try:
-        role, sdk_thread_id = (_read_handle_part(parts[1]), _read_handle_part(parts[2]))
-    except (UnicodeDecodeError, ValueError) as error:
-        raise ValueError("thread_id must be a valid role-bound Codex thread handle") from error
-    if not role or not sdk_thread_id:
-        raise ValueError("thread_id must be a valid role-bound Codex thread handle")
-    return role, sdk_thread_id
-
-
-def _handle_part(value: str) -> str:
-    return base64.urlsafe_b64encode(value.encode("utf-8")).decode("ascii").rstrip("=")
-
-
-def _read_handle_part(value: str) -> str:
-    padded = value + "=" * (-len(value) % 4)
-    return base64.b64decode(padded, altchars=b"-_").decode("utf-8")

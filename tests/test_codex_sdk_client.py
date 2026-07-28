@@ -85,7 +85,12 @@ class BlockingFakeSDK(FakeSDK):
 
 
 class CodexAgentClientTests(unittest.IsolatedAsyncioTestCase):
-    def _client(self, sdk: FakeSDK, image_factory=lambda path: ("image", path)):
+    def _client(
+        self,
+        sdk: FakeSDK,
+        image_factory=lambda path: ("image", path),
+        thread_bindings: dict[str, str] | None = None,
+    ):
         self.sandbox = object()
         self.approval_mode = object()
         return codex_sdk_client.CodexAgentClient(
@@ -93,6 +98,7 @@ class CodexAgentClientTests(unittest.IsolatedAsyncioTestCase):
             image_factory=image_factory,
             sandbox=self.sandbox,
             approval_mode=self.approval_mode,
+            thread_bindings=thread_bindings,
         )
 
     async def test_start_enters_one_chatgpt_managed_sdk_client(self) -> None:
@@ -154,7 +160,8 @@ class CodexAgentClientTests(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(invocation.payload, {"intent": "hold"})
-        self.assertNotIn("leader-thread", invocation.thread_id)
+        self.assertEqual(invocation.thread_id, "leader-thread")
+        self.assertEqual(client.thread_bindings, {"leader": "leader-thread"})
         self.assertEqual(invocation.turn_id, "turn-1")
         self.assertEqual(invocation.usage, {"total_tokens": 12})
         self.assertEqual(len(sdk.started), 1)
@@ -167,20 +174,13 @@ class CodexAgentClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(thread.run_calls[0][0], "Return a decision.")
         self.assertEqual(thread.run_calls[0][1]["output_schema"], {"type": "object"})
 
-    async def test_invoke_resumes_a_role_bound_handle_on_a_fresh_client(self) -> None:
-        initial_sdk = FakeSDK(
-            {"account": {"type": "chatgpt"}}, FakeThread("prior-thread")
-        )
-        prior_handle = (
-            await self._client(initial_sdk).invoke(
-                "follower", "Inspect first frame.", {"type": "object"}
-            )
-        ).thread_id
-        thread = FakeThread("continued-thread")
+    async def test_invoke_resumes_a_persisted_role_binding_on_a_fresh_client(self) -> None:
+        thread = FakeThread("prior-thread")
         sdk = FakeSDK({"account": {"type": "chatgpt"}}, thread)
 
-        invocation = await self._client(sdk).invoke(
-            "follower", "Inspect this.", {"type": "object"}, thread_id=prior_handle
+        client = self._client(sdk, thread_bindings={"follower": "prior-thread"})
+        invocation = await client.invoke(
+            "follower", "Inspect this.", {"type": "object"}, thread_id="prior-thread"
         )
 
         self.assertEqual(
@@ -192,25 +192,34 @@ class CodexAgentClientTests(unittest.IsolatedAsyncioTestCase):
             })],
         )
         self.assertEqual(sdk.started, [])
-        self.assertNotIn("continued-thread", invocation.thread_id)
+        self.assertEqual(invocation.thread_id, "prior-thread")
+        self.assertEqual(client.thread_bindings, {"follower": "prior-thread"})
 
-    async def test_invoke_rejects_a_restored_handle_under_another_role(self) -> None:
-        origin_sdk = FakeSDK(
-            {"account": {"type": "chatgpt"}}, FakeThread("shared-thread")
-        )
-        leader_handle = (
-            await self._client(origin_sdk).invoke("leader", "Lead.", {"type": "object"})
-        ).thread_id
+    async def test_invoke_rejects_a_persisted_id_under_another_role(self) -> None:
         restored_sdk = FakeSDK(
             {"account": {"type": "chatgpt"}}, FakeThread("shared-thread")
         )
 
         with self.assertRaisesRegex(RuntimeError, "different role"):
-            await self._client(restored_sdk).invoke(
-                "follower", "Follow.", {"type": "object"}, thread_id=leader_handle
+            await self._client(
+                restored_sdk, thread_bindings={"leader": "shared-thread"}
+            ).invoke(
+                "follower", "Follow.", {"type": "object"}, thread_id="shared-thread"
             )
 
         self.assertEqual(restored_sdk.resumed, [])
+
+    async def test_invoke_rejects_an_unknown_or_changed_persisted_id(self) -> None:
+        sdk = FakeSDK({"account": {"type": "chatgpt"}}, FakeThread("known-thread"))
+
+        with self.assertRaisesRegex(RuntimeError, "not registered"):
+            await self._client(
+                sdk, thread_bindings={"follower": "known-thread"}
+            ).invoke(
+                "follower", "Follow.", {"type": "object"}, thread_id="changed-thread"
+            )
+
+        self.assertEqual(sdk.resumed, [])
 
     async def test_invoke_passes_an_image_as_a_local_sdk_input(self) -> None:
         thread = FakeThread("follower-thread")
