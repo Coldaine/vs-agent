@@ -20,11 +20,21 @@ class ScriptedModel:
     def __init__(self) -> None:
         self.roles: list[str] = []
         self.image_paths: list[tuple[str, object]] = []
+        self.schemas: list[dict] = []
 
     def invoke(self, role: str, prompt: str, schema: dict, image_path=None) -> dict:
         self.roles.append(role)
         self.image_paths.append((role, image_path))
+        self.schemas.append(schema)
         if role == "leader":
+            if schema is goal_graph.MENU_LEADER_SCHEMA or "Menu steps remaining" in prompt:
+                return {
+                    "screen": "CHARACTER_SELECT",
+                    "action": "confirm",
+                    "click": None,
+                    "ready_for_run": False,
+                    "reason": "advance",
+                }
             if "LEVEL_UP" in prompt:
                 return {"intent": "choose upgrade", "option": 2, "reason": "damage"}
             return {"intent": "farm open ground", "option": None, "reason": "safe growth"}
@@ -32,22 +42,50 @@ class ScriptedModel:
 
 
 class ScriptedTools:
-    def __init__(self, observations: list[dict], evaluation: dict | None = None) -> None:
+    def __init__(
+        self,
+        observations: list[dict],
+        evaluation: dict | None = None,
+        *,
+        entry_only: bool = False,
+        menu_steps_budget: int = 40,
+    ) -> None:
         self.observations = list(observations)
         self.evaluation = evaluation or {
             "status": "achieved",
             "reason": "target proven",
             "evidence": ["outcome.json"],
         }
+        self.entry_only = entry_only
+        self.menu_steps_budget = menu_steps_budget
         self.calls: list[object] = []
+        self.in_game = False
 
     def prepare(self) -> dict:
         self.calls.append("prepare")
-        return {"run_id": "run-test", "verified": True}
+        return {
+            "run_id": "run-test",
+            "verified": True,
+            "entry_only": self.entry_only,
+            "menu_steps_budget": self.menu_steps_budget,
+            "eval_contract": {
+                "character": "Antonio",
+                "stage": "Mad Forest",
+                "modifiers": {"arcanas": False},
+            },
+        }
 
     def observe(self) -> dict:
         self.calls.append("observe")
         return self.observations.pop(0)
+
+    def menu_action(self, action: str, click=None) -> dict:
+        self.calls.append(("menu_action", action, click))
+        return {"ok": True, "evidence": [f"menu:{action}"]}
+
+    def mark_in_game(self) -> None:
+        self.calls.append("mark_in_game")
+        self.in_game = True
 
     def submit_direction(self, direction: str, latency_ms: float) -> bool:
         self.calls.append(("submit_direction", direction, latency_ms))
@@ -64,6 +102,14 @@ class ScriptedTools:
     def evaluate(self, goal: str, run_id: str) -> dict:
         self.calls.append(("evaluate", goal, run_id))
         return self.evaluation
+
+    def evaluate_entry(self, run_id: str) -> dict:
+        self.calls.append(("evaluate_entry", run_id))
+        return {
+            "status": "achieved",
+            "reason": "vision reached in-game HUD under fixed eval contract",
+            "evidence": ["entry-outcome.json"],
+        }
 
     def neutralize(self) -> None:
         self.calls.append("neutralize")
@@ -94,6 +140,129 @@ class GoalGraphTests(unittest.TestCase):
         self.assertIn(("control_window", 2.0), tools.calls)
         self.assertEqual(model.image_paths[-1], ("follower", Path("frame.jpg")))
         self.assertEqual(result["evidence"], ["tick-1", "outcome.json"])
+        self.assertEqual(tools.calls[-1], "neutralize")
+
+    def test_menu_observation_routes_to_vision_leader_not_blocked(self) -> None:
+        class MenuThenPlay(ScriptedModel):
+            def __init__(self) -> None:
+                super().__init__()
+                self.menu_calls = 0
+
+            def invoke(self, role: str, prompt: str, schema: dict, image_path=None) -> dict:
+                if "Menu steps remaining" in prompt:
+                    self.menu_calls += 1
+                    self.roles.append(role)
+                    self.schemas.append(schema)
+                    if self.menu_calls == 1:
+                        return {
+                            "screen": "CHARACTER_SELECT",
+                            "action": "confirm",
+                            "click": None,
+                            "ready_for_run": False,
+                            "reason": "confirm antonio",
+                        }
+                    return {
+                        "screen": "IN_GAME",
+                        "action": "wait",
+                        "click": None,
+                        "ready_for_run": True,
+                        "reason": "hud visible",
+                    }
+                return super().invoke(role, prompt, schema, image_path)
+
+        model = MenuThenPlay()
+        tools = ScriptedTools(
+            [
+                {
+                    "screen_type": "MENU",
+                    "screen_guess": "CHARACTER_SELECT",
+                    "ocr_hint": "garbage",
+                    "image_path": "menu.jpg",
+                },
+                {
+                    "screen_type": "MENU",
+                    "screen_guess": "UNKNOWN",
+                    "ocr_hint": "still garbage",
+                    "image_path": "menu2.jpg",
+                },
+            ],
+            entry_only=True,
+        )
+        graph = goal_graph.build_goal_graph(model, tools, InMemorySaver())
+
+        result = graph.invoke(
+            goal_graph.initial_state("reach Mad Forest HUD", retries=0),
+            {"configurable": {"thread_id": "menu-route"}, "recursion_limit": 40},
+        )
+
+        self.assertEqual(result["status"], "achieved")
+        self.assertIn(("menu_action", "confirm", None), tools.calls)
+        self.assertIn("mark_in_game", tools.calls)
+        self.assertIn(("evaluate_entry", "run-test"), tools.calls)
+        self.assertNotIn(("submit_direction", "NE", 0.0), tools.calls)
+        self.assertTrue(
+            any(schema is goal_graph.MENU_LEADER_SCHEMA for schema in model.schemas)
+        )
+
+    def test_ocr_hint_alone_cannot_force_play_transition(self) -> None:
+        model = ScriptedModel()
+        tools = ScriptedTools(
+            [
+                {
+                    "screen_type": "MENU",
+                    "screen_guess": "CHARACTER_SELECT",
+                    "ocr_hint": "IN_GAME 00:16 MAD FOREST",
+                    "image_path": "menu.jpg",
+                },
+                {
+                    "screen_type": "MENU",
+                    "screen_guess": "CHARACTER_SELECT",
+                    "ocr_hint": "IN_GAME 00:16 MAD FOREST",
+                    "image_path": "menu2.jpg",
+                },
+            ],
+            entry_only=True,
+            menu_steps_budget=1,
+        )
+        graph = goal_graph.build_goal_graph(model, tools, InMemorySaver())
+
+        result = graph.invoke(
+            goal_graph.initial_state("reach HUD", retries=0),
+            {"configurable": {"thread_id": "ocr-not-authority"}, "recursion_limit": 20},
+        )
+
+        # One menu action then budget exhausted — never promoted by OCR hint text.
+        self.assertEqual(result["status"], "blocked")
+        self.assertIn("menu step budget", result["reason"])
+        self.assertNotIn("mark_in_game", tools.calls)
+
+    def test_menu_budget_exhaustion_neutralizes_and_blocks(self) -> None:
+        class AlwaysMenu(ScriptedModel):
+            def invoke(self, role: str, prompt: str, schema: dict, image_path=None) -> dict:
+                self.roles.append(role)
+                return {
+                    "screen": "STAGE_SELECT",
+                    "action": "down",
+                    "click": None,
+                    "ready_for_run": False,
+                    "reason": "still looking",
+                }
+
+        model = AlwaysMenu()
+        tools = ScriptedTools(
+            [{"screen_type": "MENU", "image_path": f"m{i}.jpg"} for i in range(5)],
+            entry_only=True,
+            menu_steps_budget=2,
+        )
+        graph = goal_graph.build_goal_graph(model, tools, InMemorySaver())
+
+        result = graph.invoke(
+            goal_graph.initial_state("reach HUD", retries=0),
+            {"configurable": {"thread_id": "budget"}, "recursion_limit": 30},
+        )
+
+        self.assertEqual(result["status"], "blocked")
+        self.assertIn("budget", result["reason"])
         self.assertEqual(tools.calls[-1], "neutralize")
 
     def test_level_up_routes_to_leader_without_calling_follower(self) -> None:

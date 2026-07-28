@@ -18,6 +18,9 @@ limit_break: false
 inverse: false
 endless: false
 goal_target_survival_s: 540
+# Vision leader menu-entry budget (one screenshot/action per step).
+menu_steps_budget: 40
+menu_action_settle_s: 0.35
 
 # perception
 level_up_ocr_trigger: "LEVEL UP"
@@ -28,6 +31,17 @@ window_title_hint: "Vampire Survivors"
 steam_app_id: "1794680"
 capture_backend: wgc
 input_backend: keyboard
+# Fixed-display calibration: WGC frame coords * scale = Windows hit-test.
+# REQUIRE fullscreen on the capture monitor. Windowed/border flicker
+# (e.g. 2562x1479 vs 2560x1380) invalidates clicks — run unattended.
+# Recalibrate these numbers once after setting Options → Fullscreen.
+require_fullscreen: true
+capture_to_input_scale: 1.25
+capture_calibration_resolution: [2560, 1440]
+capture_calibration_resolutions:
+  - [2560, 1440]
+capture_calibration_tolerance_px: 8
+capture_contract_wait_s: 3.0
 gamepad_ready_timeout_s: 3.0
 gamepad_create_retries: 3
 gamepad_recreate_on_error: true
@@ -56,7 +70,8 @@ capture_retries: 3
 # G0 character-grid cursor changes affect a small fraction of the 2562x1472
 # frame. Calibrated from the live 0.0051 mean pixel delta; retain margin while
 # still requiring a visible screenshot change.
-key_diff_threshold: 0.004
+# Character-grid cursor changes are tiny on 2562x1479; live G0 saw 0.0032.
+key_diff_threshold: 0.003
 movement_diff_threshold: 0.1
 tesseract_cmd: "C:/Program Files/Tesseract-OCR/tesseract.exe"
 menu_ocr_config: "--psm 6"

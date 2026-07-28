@@ -340,3 +340,72 @@ doppler run -- python spine/run.py --reflex-only
 - key_diff: 0.0051
 - key_ocr_before: Rockstar | 28029 | (_mercow ,  : wl & al Bl Bl e 4 oa Ae a é a Ramba | w ~ ; = : B® Go Mel va | 3 o 7 } ° Ambrojoe s ae > BA @ ie) @. ¢ - 22? 22? 22? Random = mmm (6 EO) aS Cee 
 - key_ocr_after: |  : | & a) So) Rl y | Gx oh Ae af & Ramba .  : ¢ ir  "ae = ] : B® Go Mel va | & : ° : Ambrojoe 4 i  il me | OCeroes| E 2 : , a 22? 22? 22? Random " 2 momen | |  2 = 
+
+## G0 Plumbing Gate — 2026-07-28 09:22:14
+
+**Verdict:** FAILED
+
+**Results:**
+- launch: FAIL (expected one of ['CHARACTER_SELECT', 'MAIN_MENU', 'STAGE_SELECT', 'TITLE', 'WARNING'], got UNKNOWN: '(2) ROCKSTAR A A. 28029 [CENROS } ! VAMPIRE “="S" SURVIVORS ‘EEE. FIRSTSURVIVATON @AE. D= PEP (CREDITS ) (64958327R) @ =. (WE — VAMPIRE AT HE FIRST SURVIVATON IAD 239 GS 3 AGO? > ,')
+
+**Evidence:**
+
+## G0 Plumbing Gate — 2026-07-28 09:22:38
+
+**Verdict:** FAILED
+
+**Results:**
+- blocked: BLOCKED
+
+**Evidence:**
+- blocked_status: status/BLOCKED.md is active
+
+## G0 Plumbing Gate — 2026-07-28 09:23:27
+
+**Verdict:** FAILED
+
+**Results:**
+- launch: PASS
+- capture: PASS
+- keys: FAIL (main-menu highlight diff too low: 0.0032)
+
+**Evidence:**
+- launch_state: CHARACTER_SELECT
+- capture_resolution: 2562x1479
+- capture_mean_brightness: 92.96
+
+## G0 Plumbing Gate — 2026-07-28 09:23:59
+
+**Verdict:** FAILED
+
+**Results:**
+- launch: PASS
+- capture: PASS
+- keys: PASS
+- menu_macro: FAIL (expected one of ['CHARACTER_SELECT'], got UNKNOWN: 'ROCKSTAR @ CA EB “ RN 2 & PA ES) TH 2) E FE BY IDB RRR ERE — ROCIAEA \\&, 28029] -(=«)- GE | <P J OE __ SE NB . B E EE | OO EE | Z +368 & A A 4. VW @ — BIE _)} FE +403 I IU +21% TAL')
+
+**Evidence:**
+- launch_state: CHARACTER_SELECT
+- capture_resolution: 2562x1479
+- capture_mean_brightness: 92.96
+- key_diff: 0.0032
+- key_ocr_before: Bh Vampire survivors = o x Rockstar " | 28029 | [_sacx ) (mercer)  ae Character Selection 7 - = LA a 5 & a TY, ; | @ | Pal A.) tK @ % a i ey) A, a ] ry an " ah & = 5 x  ‘ g 4-8 «|X
+- key_ocr_after: Bh Vampire survivors = o x Rockstar " | 28029 | [_sacx ) (mercer)  ae Character Selection 7 -. : a TY, ] ry an " ah & = 5 x  : ” Fey Ee Bio ¢: » wy ™ Al PS St a) ft a a Rae a Ee i 
+
+## G0 Plumbing Gate — 2026-07-28 09:26:38
+
+**Verdict:** FAILED
+
+**Results:**
+- launch: PASS
+- capture: PASS
+- keys: PASS
+- menu_macro: FAIL (expected one of ['CHARACTER_SELECT'], got UNKNOWN: 'ROCKSTAR COM SEHS GES PHTO OAR ROCKSTAR | 28029 | — | 3 WAT 3 “A | ¢ 2 RP SIE OF 5 HEE 2 TY: RY $0 DEL BEL. 6 MP =) 2 OE ALLE & “I : AY “3 7) A 2 | FAL I = & 1 = TY = |')
+
+**Evidence:**
+- launch_state: CHARACTER_SELECT
+- capture_resolution: 2562x1479
+- capture_mean_brightness: 92.97
+- key_diff: 0.0031
+- key_ocr_before: a —— Rockstar (\& 28029] ~(=e)- E=_ | <p I Th r " a nd  . B 1B) Z +368 & a A 4. vw g — bie | i +403 1 rn +21% "iy  & a 7 ok qi ® _ s *- mn Ea Q 2 bd +31% 55 = zs es fee ; +50% : : 
+- key_ocr_after: Bh Vampire survivors = o x Rockstar " | 28029 | [_sacx ) (mercer) ms . Ss = i" & - ——= = ae Character Selection 7 ; | ' Te. P ih ; | «| Pall Ra) ih . A cl a Dy : ] @ =" ¢ a : | 2 «

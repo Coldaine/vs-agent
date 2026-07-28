@@ -29,12 +29,21 @@ class FakeStageIO:
 class StartRunTests(unittest.TestCase):
     def test_refuses_to_confirm_a_stage_other_than_the_fixed_eval_stage(self) -> None:
         io = FakeStageIO("Stage Selection Green Acres")
+        cfg = {
+            "stage": "Mad Forest",
+            "hyper": False,
+            "hurry": False,
+            "arcanas": False,
+            "limit_break": False,
+            "inverse": False,
+            "endless": False,
+        }
 
         with (mock.patch.object(launch, "_block"),
               mock.patch.object(launch, "_press_and_expect",
                                 side_effect=AssertionError("must not confirm"))):
             with self.assertRaisesRegex(RuntimeError, "Mad Forest"):
-                launch.start_run(io, {"stage": "Mad Forest"})
+                launch.start_run(io, cfg)
 
         self.assertEqual(io.keys, [])
 
@@ -137,6 +146,80 @@ class ScreenClassificationTests(unittest.TestCase):
         state, _ = launch.classify_screen(io)
 
         self.assertEqual(state, "CHARACTER_SELECT")
+
+    def test_recognizes_level_up_before_generic_timer_match(self) -> None:
+        io = FakeStageIO("LEVEL UP Whip Garlic 00:16")
+
+        state, _ = launch.classify_screen(io)
+
+        self.assertEqual(state, "LEVEL_UP")
+
+    def test_recognizes_noisy_title_ocr_as_title(self) -> None:
+        io = FakeStageIO(
+            '(2) ROCKSTAR A A. 28029 VAMPIRE "="S" SURVIVORS '
+            "FIRSTSURVIVATON CREDITS"
+        )
+
+        state, _ = launch.classify_screen(io)
+
+        self.assertEqual(state, "TITLE")
+
+    def test_recognizes_noisy_character_stats_panel_as_character_select(self) -> None:
+        io = FakeStageIO(
+            "ROCKSTAR 28029 +36% +40% +21% TAL"
+        )
+
+        state, _ = launch.classify_screen(io)
+
+        self.assertEqual(state, "CHARACTER_SELECT")
+
+
+class AttachLiveTests(unittest.TestCase):
+    def test_attaches_to_in_game_and_records_modifier_baseline(self) -> None:
+        class AttachIO(FakeStageIO):
+            def __init__(self) -> None:
+                super().__init__("HP 100 Level 2 00:16")
+                self.neutralized = 0
+
+            def neutralize(self) -> None:
+                self.neutralized += 1
+
+        io = AttachIO()
+        cfg = {
+            "hyper": False,
+            "hurry": False,
+            "arcanas": False,
+            "limit_break": False,
+            "inverse": False,
+            "endless": False,
+        }
+
+        result = launch.attach_live(io, cfg)
+
+        self.assertTrue(result["attached"])
+        self.assertEqual(result["state"], "IN_GAME")
+        self.assertEqual(result["modifiers"]["hurry"], False)
+        self.assertEqual(io.neutralized, 1)
+
+    def test_refuses_to_attach_on_menu_screens(self) -> None:
+        class AttachIO(FakeStageIO):
+            def neutralize(self) -> None:
+                pass
+
+        io = AttachIO("Character Selection Antonio")
+
+        with self.assertRaisesRegex(RuntimeError, "already-live"):
+            launch.attach_live(
+                io,
+                {
+                    "hyper": False,
+                    "hurry": False,
+                    "arcanas": False,
+                    "limit_break": False,
+                    "inverse": False,
+                    "endless": False,
+                },
+            )
 
 
 if __name__ == "__main__":

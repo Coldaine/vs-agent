@@ -23,9 +23,20 @@ class FakeIO:
     def __init__(self) -> None:
         self.neutralized = 0
         self.closed = 0
+        self.menu_keys: list[str] = []
+        self.clicks: list[tuple[int, int]] = []
 
     def screenshot(self) -> FakeFrame:
         return FakeFrame()
+
+    def ocr(self, region=None, ocr_config: str = "") -> str:
+        return "Character Selection Antonio"
+
+    def menu_navigate(self, key: str) -> None:
+        self.menu_keys.append(key)
+
+    def click_frame(self, x: int, y: int) -> None:
+        self.clicks.append((x, y))
 
     def neutralize(self) -> None:
         self.neutralized += 1
@@ -90,14 +101,38 @@ class FakePerception:
 
 
 class FakeLaunch:
-    def __init__(self) -> None:
+    def __init__(self, classify: str = "CHARACTER_SELECT") -> None:
         self.calls: list[object] = []
+        self.classify = classify
+
+    def launch_game(self, cfg, io=None) -> bool:
+        self.calls.append("launch_game")
+        return True
 
     def to_stage_select(self, io, cfg) -> None:
         self.calls.append("to_stage_select")
 
     def start_run(self, io, cfg) -> None:
         self.calls.append("start_run")
+
+    def attach_live(self, io, cfg) -> dict:
+        self.calls.append("attach_live")
+        return {
+            "attached": True,
+            "state": "IN_GAME",
+            "modifiers": {
+                "hyper": False,
+                "hurry": False,
+                "arcanas": False,
+                "limit_break": False,
+                "inverse": False,
+                "endless": False,
+            },
+            "ocr": "00:16",
+        }
+
+    def classify_screen(self, io) -> tuple[str, str]:
+        return self.classify, "hint text"
 
     def select_option(self, io, option, options) -> None:
         self.calls.append(("select_option", option, options))
@@ -131,24 +166,44 @@ def fixed_config(root: str) -> dict:
         "episodes_dir": root,
         "tick_hz": 2,
         "goal_target_survival_s": 0,
+        "menu_steps_budget": 40,
+        "menu_action_settle_s": 0.0,
+        "capture_contract_wait_s": 0.0,
+        "require_fullscreen": True,
+        "capture_to_input_scale": 1.0,
+        "capture_calibration_resolution": [100, 100],
+        "capture_calibration_tolerance_px": 0,
+        "character": "Antonio",
+        "stage": "Mad Forest",
         "hyper": False,
         "hurry": False,
         "arcanas": False,
         "limit_break": False,
         "inverse": False,
         "endless": False,
+        "steam_app_id": "1794680",
     }
 
 
 class SpineGameToolsTests(unittest.TestCase):
-    def make_tools(self, root: str, controller: FakeController | None = None):
+    def make_tools(
+        self,
+        root: str,
+        controller: FakeController | None = None,
+        *,
+        attach: bool = False,
+        entry_only: bool = False,
+        classify: str = "CHARACTER_SELECT",
+    ):
         io = FakeIO()
         controller = controller or FakeController()
-        launch = FakeLaunch()
+        launch = FakeLaunch(classify=classify)
         tools = game_tools.SpineGameTools(
             fixed_config(root),
             io,
             controller,
+            attach=attach,
+            entry_only=entry_only,
             launch_module=launch,
             perception_module=FakePerception,
             writer_factory=FakeWriter,
@@ -176,6 +231,84 @@ class SpineGameToolsTests(unittest.TestCase):
             self.assertFalse(result["verified"])
             self.assertIn("hurry", result["reason"])
             self.assertEqual(launch.calls, [])
+
+    def test_prepare_launches_without_ocr_menu_macro(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            tools, _, _, launch = self.make_tools(root)
+
+            prepared = tools.prepare()
+
+            self.assertTrue(prepared["verified"])
+            self.assertEqual(launch.calls, ["launch_game"])
+            self.assertNotIn("to_stage_select", launch.calls)
+            self.assertNotIn("start_run", launch.calls)
+
+    def test_prepare_fails_closed_when_capture_is_not_fullscreen_calibration(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            config = fixed_config(root)
+            config["capture_calibration_resolution"] = [2560, 1440]
+            io = FakeIO()
+            launch = FakeLaunch()
+            tools = game_tools.SpineGameTools(
+                config,
+                io,
+                FakeController(),
+                launch_module=launch,
+                perception_module=FakePerception,
+                writer_factory=FakeWriter,
+                sleeper=lambda _: None,
+            )
+
+            prepared = tools.prepare()
+
+            self.assertFalse(prepared["verified"])
+            self.assertIn("fullscreen", prepared["reason"].lower())
+
+    def test_attach_prepare_skips_menu_macro_and_records_modifiers(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            tools, _, _, launch = self.make_tools(root, attach=True)
+
+            prepared = tools.prepare()
+
+            self.assertTrue(prepared["verified"])
+            self.assertTrue(prepared["attached"])
+            self.assertEqual(prepared["attach_state"], "IN_GAME")
+            self.assertEqual(prepared["modifiers"]["arcanas"], False)
+            self.assertEqual(launch.calls, ["attach_live"])
+            self.assertTrue(tools.in_game)
+
+    def test_observe_works_before_in_game_and_marks_ocr_as_hint(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            tools, _, _, _ = self.make_tools(root, classify="CHARACTER_SELECT")
+            tools.prepare()
+
+            observation = tools.observe()
+
+            self.assertEqual(observation["screen_type"], "MENU")
+            self.assertEqual(observation["screen_guess"], "CHARACTER_SELECT")
+            self.assertTrue(observation["hints_are_non_authoritative"])
+            self.assertTrue(Path(observation["image_path"]).is_file())
+
+    def test_menu_action_uses_io_not_controller_movement(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            tools, io, controller, _ = self.make_tools(root)
+            tools.prepare()
+
+            result = tools.menu_action("down")
+
+            self.assertTrue(result["ok"])
+            self.assertEqual(io.menu_keys, ["down"])
+            self.assertEqual(controller.submissions, [])
+
+    def test_menu_action_click_goes_through_click_frame(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            tools, io, controller, _ = self.make_tools(root)
+            tools.prepare()
+
+            tools.menu_action("click", click=[100, 200])
+
+            self.assertEqual(io.clicks, [(100, 200)])
+            self.assertEqual(controller.submissions, [])
 
     def test_model_proposal_reaches_controller_but_never_io_directly(self) -> None:
         with tempfile.TemporaryDirectory() as root:
@@ -208,18 +341,18 @@ class SpineGameToolsTests(unittest.TestCase):
 
             self.assertGreaterEqual(controller.neutralized, 1)
 
-    def test_observation_and_evaluation_emit_durable_evidence(self) -> None:
+    def test_entry_only_evaluate_succeeds_after_in_game(self) -> None:
         with tempfile.TemporaryDirectory() as root:
-            tools, _, _, _ = self.make_tools(root)
+            tools, _, _, _ = self.make_tools(
+                root, entry_only=True, classify="IN_GAME"
+            )
             prepared = tools.prepare()
+            tools.observe()
 
-            observation = tools.observe()
-            outcome = tools.evaluate("finish a run", prepared["run_id"])
+            outcome = tools.evaluate_entry(prepared["run_id"])
 
-            self.assertEqual(observation["screen_type"], "PLAY")
-            self.assertTrue(Path(observation["image_path"]).is_file())
             self.assertEqual(outcome["status"], "achieved")
-            self.assertTrue(any(item.endswith("outcome.json") for item in outcome["evidence"]))
+            self.assertIn("in-game", outcome["reason"])
 
 
 if __name__ == "__main__":

@@ -59,9 +59,24 @@ The native `/goal` command is the operator-level persistence loop. The repositor
 
 The deterministic evaluator is authoritative for game claims. The host model may continue turns, delegate work, and summarize progress, but it cannot declare a survival target achieved without an `outcome.json` artifact satisfying the configured target and validity rules.
 
+## Menu entry authority
+
+Pre-run menus are vision-led. `SpineGameTools.prepare()` only launches or
+attaches; it does not run an OCR menu macro. The LangGraph leader receives a
+screenshot, proposes one bounded menu action (`menu_action`), and repeats
+until the run starts. OCR may appear on observations as `ocr_hint` /
+`screen_guess` but must not gate transitions. YOLO and the controller own
+in-run movement safety. Use `--entry-only` to stop at the in-game HUD for G0
+plumbing proofs.
+
+**Display contract:** Vampire Survivors must be fullscreen on the capture
+monitor at `capture_calibration_resolution`. `prepare()` fails closed if the
+live frame size drifts. Run vision sessions unattended — desktop use causes
+focus/size flicker and breaks the hit-test transform.
+
 ## Known incomplete live boundaries
 
 - The six modifier values are explicit in `spine/config.yaml`, but a fresh live proof that the menu UI matches all six values is still required before a scored run.
-- Attach/recovery from an already-running gameplay or level-up screen remains incomplete.
+- Attach/recovery from an already-running gameplay or level-up screen is implemented; live attach evidence still needs a gates.md append.
 - The current upstream detector weights cover threats but not a proven gem/elite mapping.
 - The real OAuth leader/follower graph smoke passes through both Luna roles. A live game smoke is separate evidence and must not be inferred from the no-game smoke.

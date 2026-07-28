@@ -2,8 +2,9 @@
 
 ## Status
 
-In progress. Live menu and stage launch are proven; attach/recovery and the
-movement verification remain before G0 can pass.
+In progress. Vision-led menu entry is implemented; live proof must wait for an
+**unattended fullscreen** session. Interactive desktop use caused capture size
+flicker and broke the hit-test contract.
 
 ## Verified route (2026-07-28)
 
@@ -38,16 +39,13 @@ Evidence frames live in `status/`:
 
 ## Next implementation slice
 
-1. Add an attach mode to `spine/run.py` (or a narrow runtime helper): detect
-   `IN_GAME` / `LEVEL_UP`, neutralize, and skip `launch.to_stage_select()` and
-   `launch.start_run()`.
+1. [x] Attach mode + vision-led entry: `prepare()` launches/focuses only;
+   LangGraph leader navigates menus via `menu_action`. OCR is a hint, not
+   the navigator. `--entry-only` stops at the in-game HUD.
 2. Route an attached level-up through the existing planner/option selector,
    then run the controller's reflex-only loop for the G1 movement check.
-3. Save before/after evidence for a two-second movement command and append a
-   G0 result to `status/gates.md`. Do not mark G0 passed until that check and
-   the attach path have passed.
-4. Replace hard-coded click use with an explicit capture-to-input transform
-   plus a calibration assertion; fail closed when the fixed display contract
-   changes.
-5. Add an explicit six-modifier eval baseline to `spine/config.yaml`, enforce
-   it on Stage Selection, and record it in each episode's metadata.
+3. [x] Two-second movement evidence path in `verify_g0.py` after vision entry.
+   Still need a live `status/gates.md` PASS append.
+4. [x] `capture_transform.frame_to_hit_test` in `IOAdapter.click_frame`.
+5. [x] Six-modifier baseline required by prepare/attach. Live UI proof that
+   all six match Stage Selection checkboxes remains open.

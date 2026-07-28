@@ -2,6 +2,8 @@
 
 Models never receive this module's I/O objects. They submit structured
 proposals; ``Controller`` remains the sole writer of movement input.
+Menu entry is vision-led: prepare only launches/focuses; the leader proposes
+menu actions that this module executes.
 """
 
 from __future__ import annotations
@@ -14,11 +16,25 @@ from typing import Callable
 import launch
 import perceive
 import reflex
+from capture_transform import (
+    CalibrationError,
+    assert_capture_contract,
+    modifier_baseline,
+)
 from trace import EpisodeWriter
 
 
 MODIFIER_KEYS = ("hyper", "hurry", "arcanas", "limit_break", "inverse", "endless")
 MAX_CONTROL_WINDOW_S = 5.0
+MENU_ACTIONS = ("up", "down", "left", "right", "confirm", "esc", "start")
+MENU_GUESSES = {
+    "WARNING",
+    "TITLE",
+    "MAIN_MENU",
+    "CHARACTER_SELECT",
+    "STAGE_SELECT",
+    "UNKNOWN",
+}
 
 
 class SpineGameTools:
@@ -28,6 +44,8 @@ class SpineGameTools:
         io,
         controller,
         *,
+        attach: bool = False,
+        entry_only: bool = False,
         launch_module=launch,
         perception_module=perceive,
         writer_factory=EpisodeWriter,
@@ -37,6 +55,8 @@ class SpineGameTools:
         self.cfg = config
         self.io = io
         self.controller = controller
+        self.attach = attach
+        self.entry_only = entry_only
         self.launch = launch_module
         self.perception = perception_module
         self.writer_factory = writer_factory
@@ -45,31 +65,79 @@ class SpineGameTools:
         self.run_id: str | None = None
         self.writer = None
         self.started_at: float | None = None
+        self.in_game = False
         self.last_options: list[str] = []
+        self.modifiers: dict[str, bool] | None = None
         self._observation_index = 0
         self._closed = False
 
     def prepare(self) -> dict:
-        missing = [name for name in MODIFIER_KEYS if name not in self.cfg]
-        if missing:
-            return {
-                "verified": False,
-                "reason": "fixed modifier baseline is incomplete: " + ", ".join(missing),
-            }
+        try:
+            self.modifiers = modifier_baseline(self.cfg)
+        except CalibrationError as error:
+            return {"verified": False, "reason": str(error)}
 
         self.neutralize()
-        self.launch.to_stage_select(self.io, self.cfg)
-        self.launch.start_run(self.io, self.cfg)
+        attach_info = None
+        if self.attach:
+            attach_info = self.launch.attach_live(self.io, self.cfg)
+            self.in_game = True
+            self.started_at = self.clock()
+        else:
+            # Plumbing only: launch/focus. Vision leader navigates menus.
+            self.launch.launch_game(self.cfg, self.io)
+            self.in_game = False
+            self.started_at = None
+
+        try:
+            self.sleeper(float(self.cfg.get("capture_contract_wait_s", 3.0)))
+            frame = self.io.screenshot()
+            assert_capture_contract(self.cfg, (frame.width, frame.height))
+        except CalibrationError as error:
+            self.neutralize()
+            return {
+                "verified": False,
+                "reason": (
+                    f"{error}. Set Vampire Survivors to fullscreen on the "
+                    "capture monitor, leave the desktop idle, then recalibrate "
+                    "capture_calibration_resolution if the native size changed."
+                ),
+            }
+        except Exception as error:
+            self.neutralize()
+            return {
+                "verified": False,
+                "reason": f"capture contract check failed: {error}",
+            }
+
         self.run_id = f"run_{int(time.time() * 1000)}"
         self.writer = self.writer_factory(self.cfg["episodes_dir"], self.run_id)
-        self.started_at = self.clock()
         self._closed = False
-        return {"verified": True, "run_id": self.run_id}
+        self._observation_index = 0
+        result = {
+            "verified": True,
+            "run_id": self.run_id,
+            "modifiers": dict(self.modifiers),
+            "attached": bool(self.attach),
+            "entry_only": bool(self.entry_only),
+            "menu_steps_budget": int(self.cfg.get("menu_steps_budget", 40)),
+            "capture_resolution": [frame.width, frame.height],
+            "eval_contract": {
+                "character": self.cfg.get("character"),
+                "stage": self.cfg.get("stage"),
+                "modifiers": dict(self.modifiers),
+            },
+        }
+        if attach_info is not None:
+            result["attach_state"] = attach_info["state"]
+        return result
 
     def observe(self) -> dict:
         self._require_active_run()
         frame = self.io.screenshot()
-        screen_type = self.perception.screen_type(frame, self.cfg)
+        screen_type, screen_guess, ocr_hint = self._classify_observation(frame)
+        if screen_type in {"PLAY", "LEVEL_UP"}:
+            self._enter_game()
         summary = self.perception.state_summary(frame)
         self.last_options = (
             self.perception.read_options(frame) if screen_type == "LEVEL_UP" else []
@@ -82,10 +150,42 @@ class SpineGameTools:
         image_path = str(Path(self.writer.dir, "keyframes", name).resolve())
         return {
             "screen_type": screen_type,
+            "screen_guess": screen_guess,
+            "ocr_hint": ocr_hint,
             "summary": summary,
             "options": list(self.last_options),
             "image_path": image_path,
+            "in_game": self.in_game,
+            "hints_are_non_authoritative": True,
         }
+
+    def menu_action(
+        self,
+        action: str,
+        click: list[int] | tuple[int, int] | None = None,
+    ) -> dict:
+        """Execute one bounded menu input proposed by the vision leader."""
+        self._require_active_run()
+        action_key = str(action or "").lower()
+        try:
+            if click is not None:
+                if len(click) != 2:
+                    raise ValueError("click must be [x, y] frame coordinates")
+                self.io.click_frame(int(click[0]), int(click[1]))
+                evidence = f"menu:click:{int(click[0])},{int(click[1])}"
+            elif action_key in MENU_ACTIONS:
+                self.io.menu_navigate(action_key)
+                evidence = f"menu:{action_key}"
+            else:
+                raise ValueError(
+                    f"unsupported menu action {action!r}; "
+                    f"expected one of {MENU_ACTIONS} or a click"
+                )
+            self.sleeper(float(self.cfg.get("menu_action_settle_s", 0.35)))
+        except Exception:
+            self.neutralize()
+            raise
+        return {"ok": True, "evidence": [evidence]}
 
     def submit_direction(self, direction: str, latency_ms: float = 0.0) -> bool:
         return self.controller.submit_follower_proposal(direction, latency_ms)
@@ -147,7 +247,12 @@ class SpineGameTools:
         self._require_active_run()
         if run_id != self.run_id:
             raise ValueError(f"run ID mismatch: expected {self.run_id}, got {run_id}")
-        survived_s = self.clock() - float(self.started_at)
+        if self.entry_only:
+            return self.evaluate_entry(run_id)
+        if self.started_at is None:
+            survived_s = 0.0
+        else:
+            survived_s = self.clock() - float(self.started_at)
         invalid = False
         if not self._closed:
             self.writer.close(
@@ -173,6 +278,35 @@ class SpineGameTools:
             "evidence": [outcome_path],
         }
 
+    def evaluate_entry(self, run_id: str) -> dict:
+        """Success = vision reached in-game; used by G0 / --entry-only."""
+        self._require_active_run()
+        if run_id != self.run_id:
+            raise ValueError(f"run ID mismatch: expected {self.run_id}, got {run_id}")
+        self._enter_game()
+        if not self._closed:
+            self.writer.close(
+                survived_s=0.0,
+                level=self.perception.last_level,
+                kills=self.perception.last_kills,
+                invalid=False,
+                prompt_hashes={
+                    "leader": "chatgpt-oauth:gpt-5.6-luna",
+                    "follower": "chatgpt-oauth:gpt-5.6-luna",
+                },
+            )
+            self._closed = True
+        outcome_path = str(Path(self.writer.dir, "outcome.json").resolve())
+        return {
+            "status": "achieved" if self.in_game else "not_met",
+            "reason": "vision reached in-game HUD under fixed eval contract",
+            "evidence": [outcome_path],
+        }
+
+    def mark_in_game(self) -> None:
+        """Vision leader asserted in-run state; start survival clock."""
+        self._enter_game()
+
     def neutralize(self) -> None:
         self.controller.neutralize()
 
@@ -180,6 +314,44 @@ class SpineGameTools:
         self.neutralize()
         self.io.close()
 
+    def _enter_game(self) -> None:
+        if not self.in_game:
+            self.in_game = True
+            self.started_at = self.clock()
+
+    def _classify_observation(self, frame) -> tuple[str, str, str]:
+        """Return (screen_type, screen_guess, ocr_hint).
+
+        OCR / classify_screen are non-authoritative hints for the leader.
+        Routing only needs a coarse family: MENU vs in-run states.
+        """
+        ocr_hint = ""
+        try:
+            ocr_hint = " ".join(self.io.ocr().upper().split())[:300]
+        except Exception as error:
+            ocr_hint = f"ocr unavailable: {error}"
+
+        screen_guess = "UNKNOWN"
+        try:
+            screen_guess, guess_text = self.launch.classify_screen(self.io)
+            if guess_text and not ocr_hint.startswith("OCR UNAVAILABLE"):
+                ocr_hint = " ".join(guess_text.split())[:300]
+        except Exception:
+            screen_guess = "UNKNOWN"
+
+        if screen_guess in MENU_GUESSES:
+            return "MENU", screen_guess, ocr_hint
+
+        play_type = self.perception.screen_type(frame, self.cfg)
+        if play_type in {"LEVEL_UP", "DEATH", "RUN_END"}:
+            return play_type, screen_guess, ocr_hint
+        if screen_guess == "LEVEL_UP":
+            return "LEVEL_UP", screen_guess, ocr_hint
+        if screen_guess == "IN_GAME":
+            return "PLAY", screen_guess, ocr_hint
+        # Prefer vision over blocking: unknown pre-run frames go to MENU.
+        return "MENU", screen_guess, ocr_hint
+
     def _require_active_run(self) -> None:
-        if self.run_id is None or self.writer is None or self.started_at is None:
+        if self.run_id is None or self.writer is None:
             raise RuntimeError("game tools have no active prepared run")

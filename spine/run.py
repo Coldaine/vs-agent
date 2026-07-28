@@ -49,6 +49,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="Local LangGraph checkpoint database",
     )
     parser.add_argument("--config", default="spine/config.yaml")
+    parser.add_argument(
+        "--attach",
+        action="store_true",
+        help=(
+            "Attach to an already-live IN_GAME or LEVEL_UP screen; "
+            "skip vision menu entry."
+        ),
+    )
+    parser.add_argument(
+        "--entry-only",
+        action="store_true",
+        help=(
+            "Succeed when the vision leader reaches an in-game HUD; "
+            "do not continue into survival scoring."
+        ),
+    )
     return parser
 
 
@@ -59,13 +75,17 @@ def run_langgraph_goal(
     retries: int,
     checkpoint_path: str,
     config_path: str,
+    attach: bool = False,
+    entry_only: bool = False,
 ) -> dict:
     """Wire LangGraph, ChatGPT OAuth Luna roles, and deterministic game tools."""
 
     cfg = yaml.safe_load(Path(config_path).read_text(encoding="utf-8"))
     io = IOAdapter(backend=os.environ.get("VS_IO_BACKEND", "auto"), config=cfg)
     controller = Controller(io, cfg)
-    tools = SpineGameTools(cfg, io, controller)
+    tools = SpineGameTools(
+        cfg, io, controller, attach=attach, entry_only=entry_only
+    )
     model_runner = CodexOAuthRunner()
     checkpoint = Path(checkpoint_path)
     checkpoint.parent.mkdir(parents=True, exist_ok=True)
@@ -87,6 +107,8 @@ def main(argv: list[str] | None = None) -> int:
         retries=args.retries,
         checkpoint_path=args.checkpoint,
         config_path=args.config,
+        attach=args.attach,
+        entry_only=args.entry_only,
     )
     print(json.dumps({
         "thread_id": thread_id,

@@ -37,6 +37,8 @@ def classify_screen(io) -> tuple[str, str]:
     text = _text(io)
     if "PHOTOSENSITIVITY WARNING" in text:
         return "WARNING", text
+    if "LEVEL UP" in text or "LEVELUP" in text:
+        return "LEVEL_UP", text
     if "MAD FOREST" in text:
         return "STAGE_SELECT", text
     if "STAGE SELECTION" in text:
@@ -47,13 +49,50 @@ def classify_screen(io) -> tuple[str, str]:
         return "CHARACTER_SELECT", text
     if any(token in text for token in _CHARACTER_TOKENS):
         return "CHARACTER_SELECT", text
-    if re.search(r"VAMPIRE\W{0,6}SURVIVORS", text):
+    # Character detail panels often OCR as noise but keep Rockstar + stat deltas.
+    if "ROCKSTAR" in text and (
+        "EGGS" in text
+        or "SKIN" in text
+        or "CO-OP" in text
+        or re.search(r"[+\u2212\-]\s*\d+%", text)
+    ):
+        return "CHARACTER_SELECT", text
+    if (
+        re.search(r"VAMPIRE\W{0,12}SURVIVORS", text)
+        or ("VAMPIRE" in text and "SURVIVOR" in text)
+        or "FIRST SURVIV" in text
+        or "CREDITS" in text
+    ):
         return "TITLE", text
     if re.search(r"\b\d{1,2}:\d{2}\b", text):
         return "IN_GAME", text
     if "START" in text or "ADVENTURE" in text:
         return "MAIN_MENU", text
     return "UNKNOWN", text
+
+
+def attach_live(io, cfg: dict) -> dict:
+    """Attach to an already-live IN_GAME or LEVEL_UP screen without menu replay.
+
+    Neutralizes held input first, classifies the live state, and returns a
+    structured attach record. Refuses menu/title screens so callers cannot
+    accidentally treat a pre-run screen as an attached episode.
+    """
+    from capture_transform import modifier_baseline
+
+    io.neutralize()
+    state, text = classify_screen(io)
+    if state not in {"IN_GAME", "LEVEL_UP"}:
+        raise RuntimeError(
+            "attach requires an already-live IN_GAME or LEVEL_UP screen; "
+            f"got {state}: {text[:180]!r}"
+        )
+    return {
+        "attached": True,
+        "state": state,
+        "modifiers": modifier_baseline(cfg),
+        "ocr": text[:240],
+    }
 
 
 def _wait_for_state(io, expected: set[str], timeout_s: float = 12.0):
@@ -66,10 +105,16 @@ def _wait_for_state(io, expected: set[str], timeout_s: float = 12.0):
                 return last_state, last_text
         except Exception as error:
             last_text = f"capture pending: {error}"
-        if (last_state == "UNKNOWN"
-                and "FILTER: OFF" in last_text
-                and "CHARACTER_SELECT" in expected):
-            return "CHARACTER_SELECT", last_text
+        if last_state == "UNKNOWN" and "CHARACTER_SELECT" in expected:
+            # Character-grid moves often OCR as noise while the menu is still
+            # the character selector. Treat Rockstar + menu chrome as sticky.
+            sticky = last_text.upper()
+            if (
+                "FILTER: OFF" in sticky
+                or ("ROCKSTAR" in sticky and re.search(r"[+\u2212\-]\s*\d+%", sticky))
+                or any(token in sticky for token in _CHARACTER_TOKENS)
+            ):
+                return "CHARACTER_SELECT", last_text
         time.sleep(0.4)
     raise RuntimeError(
         f"expected one of {sorted(expected)}, got {last_state}: {last_text[:180]!r}")
@@ -247,13 +292,18 @@ def to_stage_select(io, cfg: dict) -> None:
 def start_run(io, cfg: dict) -> None:
     """Confirm the selected stage and prove an in-game HUD appears."""
     try:
+        from capture_transform import modifier_baseline
+
+        # Record the explicit baseline before the run starts so scored
+        # episodes never silently inherit an incomplete modifier contract.
+        modifier_baseline(cfg)
         target_stage = str(cfg["stage"]).upper()
         state, text = classify_screen(io)
         if state != "STAGE_SELECT" or target_stage not in text:
             raise RuntimeError(
                 f"refusing to start: expected selected stage {cfg['stage']!r}, "
                 f"got {state}: {text[:180]!r}")
-        _press_and_expect(io, "confirm", {"IN_GAME"}, timeout_s=15.0)
+        _press_and_expect(io, "confirm", {"IN_GAME", "LEVEL_UP"}, timeout_s=15.0)
     except Exception as error:
         _block(io, f"Unable to start Mad Forest: {error}")
         raise

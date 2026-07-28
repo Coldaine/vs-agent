@@ -437,16 +437,36 @@ class IOAdapter:
         self._keys.click(x, y)
 
     def click_frame(self, x: int, y: int) -> None:
-        """Click frame coordinates relative to the captured game window."""
+        """Click frame coordinates relative to the captured game window.
+
+        Applies the calibrated capture-to-hit-test transform and fails closed
+        when the live capture resolution no longer matches calibration.
+        """
         import ctypes
 
+        from capture_transform import frame_to_hit_test
+
+        frame_size = None
+        try:
+            frame = self.screenshot()
+            frame_size = (frame.width, frame.height)
+        except Exception:
+            # Fall back to configured calibration resolution when capture is
+            # temporarily unavailable; frame_to_hit_test still applies scale.
+            expected = self.config.get("capture_calibration_resolution")
+            if expected is not None:
+                frame_size = (int(expected[0]), int(expected[1]))
+
+        hit_x, hit_y = frame_to_hit_test(
+            x, y, self.config, frame_size=frame_size
+        )
         window = self._game_window()
         if window is not None:
             origin_x, origin_y = window.left, window.top
         else:
             origin_x, origin_y = self.config.get("wgc_monitor_origin", [0, 0])
         user32 = ctypes.windll.user32
-        user32.SetCursorPos(int(origin_x + x), int(origin_y + y))
+        user32.SetCursorPos(int(origin_x + hit_x), int(origin_y + hit_y))
         user32.mouse_event(0x0002, 0, 0, 0, 0)
         user32.mouse_event(0x0004, 0, 0, 0, 0)
 

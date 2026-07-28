@@ -22,10 +22,16 @@ class SmokeGameTools:
         ]
 
     def prepare(self) -> dict:
-        return {"verified": True, "run_id": "oauth-smoke"}
+        return {"verified": True, "run_id": "oauth-smoke", "entry_only": False}
 
     def observe(self) -> dict:
         return self.observations.pop(0)
+
+    def menu_action(self, action: str, click=None) -> dict:
+        raise AssertionError("smoke never enters menu navigation")
+
+    def mark_in_game(self) -> None:
+        return None
 
     def submit_direction(self, direction: str, latency_ms: float) -> bool:
         return direction in {"N", "NE", "E", "SE", "S", "SW", "W", "NW", "HOLD"}
@@ -42,6 +48,9 @@ class SmokeGameTools:
             "reason": "both OAuth roles completed and deterministic tools evaluated",
             "evidence": ["smoke-outcome"],
         }
+
+    def evaluate_entry(self, run_id: str) -> dict:
+        raise AssertionError("smoke is not entry-only")
 
     def neutralize(self) -> None:
         return None

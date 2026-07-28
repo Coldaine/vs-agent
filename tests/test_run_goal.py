@@ -34,6 +34,16 @@ class GoalCliTests(unittest.TestCase):
         self.assertIn("540 seconds", args.goal)
         self.assertIn("fixed", args.goal.lower())
 
+    def test_attach_flag_is_available_for_live_recovery(self) -> None:
+        args = run.build_parser().parse_args(["--attach"])
+
+        self.assertTrue(args.attach)
+
+    def test_entry_only_flag_is_available_for_vision_menu_proof(self) -> None:
+        args = run.build_parser().parse_args(["--entry-only"])
+
+        self.assertTrue(args.entry_only)
+
 
 if __name__ == "__main__":
     unittest.main()
