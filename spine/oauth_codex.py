@@ -84,7 +84,7 @@ class CodexOAuthRunner:
         self,
         role: str,
         prompt: str,
-        schema: dict,
+        schema: dict | None,
         image_path: Path | None = None,
     ) -> dict:
         """Return one schema-constrained Luna response for a named role."""
@@ -99,7 +99,8 @@ class CodexOAuthRunner:
             temp_dir = Path(temp_name)
             schema_path = temp_dir / "output.schema.json"
             output_path = temp_dir / "output.json"
-            schema_path.write_text(json.dumps(schema), encoding="utf-8")
+            if schema is not None:
+                schema_path.write_text(json.dumps(schema), encoding="utf-8")
 
             command = [
                 self.config.executable,
@@ -113,11 +114,11 @@ class CodexOAuthRunner:
                 "--model",
                 self.config.model,
                 "--json",
-                "--output-schema",
-                str(schema_path),
                 "--output-last-message",
                 str(output_path),
             ]
+            if schema is not None:
+                command.extend(["--output-schema", str(schema_path)])
             if image_path is not None:
                 command.extend(["--image", str(image_path.resolve())])
             command.append("-")
