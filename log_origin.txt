@@ -1,0 +1,9 @@
+b74eb79 Merge pull request #12 from Coldaine/feat/cloud-vs-harness-rescue
+a700019 Make sideInspiration harness sim-only and address review blockers.
+7088628 Park cloud vs_harness under sideInspiration for review.
+556c337 Land orphaned cloud vs_harness beside spine.
+11ab03d WGC backend for io_adapter + multi-monitor support + config hardening
+75ba6f8 Update gates.md with session 2 progress and remaining blockers
+55633f6 Fix G0 verifier defects and prepare runtime dependencies
+d899d6d Configure runtime model secrets via injected provider keys
+4529e2e Fill spine seams (model_client, io_adapter, perceive); fix run.py brief defect; add scaffolding + status

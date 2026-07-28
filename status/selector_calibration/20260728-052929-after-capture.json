@@ -1,0 +1,364 @@
+{
+  "label": "after-capture",
+  "image": "status\\selector_calibration\\20260728-052929-after-capture.jpg",
+  "sha256": "a44fa2bf4b87a46c9d61e104a17d8737437075f0e21195f4cc2e1b57d5743594",
+  "resolution": [
+    2562,
+    1472
+  ],
+  "state": "CHARACTER_SELECT",
+  "ocr_words": [
+    {
+      "text": "Rocksta.",
+      "left": 334,
+      "top": 84,
+      "width": 156,
+      "height": 41,
+      "conf": 23
+    },
+    {
+      "text": "Cc",
+      "left": 496,
+      "top": 84,
+      "width": 16,
+      "height": 56,
+      "conf": 36
+    },
+    {
+      "text": "ae",
+      "left": 777,
+      "top": 153,
+      "width": 25,
+      "height": 12,
+      "conf": 32
+    },
+    {
+      "text": "7",
+      "left": 939,
+      "top": 119,
+      "width": 85,
+      "height": 34,
+      "conf": 15
+    },
+    {
+      "text": "(Bs",
+      "left": 1067,
+      "top": 43,
+      "width": 150,
+      "height": 115,
+      "conf": 53
+    },
+    {
+      "text": "28029|",
+      "left": 1264,
+      "top": 79,
+      "width": 191,
+      "height": 82,
+      "conf": 27
+    },
+    {
+      "text": "(ax",
+      "left": 1607,
+      "top": 46,
+      "width": 139,
+      "height": 119,
+      "conf": 35
+    },
+    {
+      "text": ")",
+      "left": 1775,
+      "top": 155,
+      "width": 1,
+      "height": 6,
+      "conf": 72
+    },
+    {
+      "text": "(mer",
+      "left": 1862,
+      "top": 76,
+      "width": 299,
+      "height": 34,
+      "conf": 8
+    },
+    {
+      "text": "once)",
+      "left": 2170,
+      "top": 40,
+      "width": 166,
+      "height": 117,
+      "conf": 8
+    },
+    {
+      "text": "Character",
+      "left": 910,
+      "top": 216,
+      "width": 354,
+      "height": 49,
+      "conf": 95
+    },
+    {
+      "text": "Selection",
+      "left": 1307,
+      "top": 214,
+      "width": 350,
+      "height": 51,
+      "conf": 95
+    },
+    {
+      "text": "|",
+      "left": 1886,
+      "top": 162,
+      "width": 39,
+      "height": 155,
+      "conf": 20
+    },
+    {
+      "text": "EIMER:",
+      "left": 1963,
+      "top": 162,
+      "width": 195,
+      "height": 155,
+      "conf": 0
+    },
+    {
+      "text": "OFF)",
+      "left": 2183,
+      "top": 162,
+      "width": 233,
+      "height": 155,
+      "conf": 54
+    },
+    {
+      "text": "fad)",
+      "left": 643,
+      "top": 408,
+      "width": 124,
+      "height": 153,
+      "conf": 0
+    },
+    {
+      "text": "BF,",
+      "left": 804,
+      "top": 408,
+      "width": 175,
+      "height": 153,
+      "conf": 35
+    },
+    {
+      "text": "aoa",
+      "left": 1018,
+      "top": 307,
+      "width": 367,
+      "height": 318,
+      "conf": 15
+    },
+    {
+      "text": "la.",
+      "left": 1464,
+      "top": 307,
+      "width": 319,
+      "height": 318,
+      "conf": 35
+    },
+    {
+      "text": "|",
+      "left": 1815,
+      "top": 572,
+      "width": 71,
+      "height": 42,
+      "conf": 49
+    },
+    {
+      "text": "=",
+      "left": 643,
+      "top": 573,
+      "width": 104,
+      "height": 114,
+      "conf": 39
+    },
+    {
+      "text": "Sol",
+      "left": 768,
+      "top": 571,
+      "width": 999,
+      "height": 224,
+      "conf": 0
+    },
+    {
+      "text": "of",
+      "left": 1198,
+      "top": 567,
+      "width": 78,
+      "height": 307,
+      "conf": 70
+    },
+    {
+      "text": "$2)\u00bb",
+      "left": 1352,
+      "top": 571,
+      "width": 410,
+      "height": 224,
+      "conf": 14
+    },
+    {
+      "text": "Bg",
+      "left": 243,
+      "top": 890,
+      "width": 34,
+      "height": 30,
+      "conf": 24
+    },
+    {
+      "text": "tH",
+      "left": 246,
+      "top": 928,
+      "width": 30,
+      "height": 21,
+      "conf": 70
+    },
+    {
+      "text": "bh",
+      "left": 1817,
+      "top": 866,
+      "width": 46,
+      "height": 50,
+      "conf": 31
+    },
+    {
+      "text": "tal",
+      "left": 768,
+      "top": 823,
+      "width": 999,
+      "height": 224,
+      "conf": 0
+    },
+    {
+      "text": "e|ut",
+      "left": 1173,
+      "top": 819,
+      "width": 231,
+      "height": 307,
+      "conf": 0
+    },
+    {
+      "text": "12\u00bb",
+      "left": 1480,
+      "top": 823,
+      "width": 282,
+      "height": 224,
+      "conf": 53
+    },
+    {
+      "text": "|",
+      "left": 220,
+      "top": 1148,
+      "width": 17,
+      "height": 100,
+      "conf": 43
+    },
+    {
+      "text": "MAX",
+      "left": 270,
+      "top": 1148,
+      "width": 75,
+      "height": 100,
+      "conf": 37
+    },
+    {
+      "text": "WEAPONS:",
+      "left": 224,
+      "top": 1152,
+      "width": 436,
+      "height": 70,
+      "conf": 84
+    },
+    {
+      "text": "6",
+      "left": 561,
+      "top": 1148,
+      "width": 26,
+      "height": 100,
+      "conf": 45
+    },
+    {
+      "text": "|",
+      "left": 620,
+      "top": 1148,
+      "width": 42,
+      "height": 100,
+      "conf": 34
+    },
+    {
+      "text": "ee",
+      "left": 797,
+      "top": 1164,
+      "width": 362,
+      "height": 70,
+      "conf": 12
+    },
+    {
+      "text": "ee",
+      "left": 1141,
+      "top": 1160,
+      "width": 188,
+      "height": 102,
+      "conf": 26
+    },
+    {
+      "text": "a",
+      "left": 1557,
+      "top": 1164,
+      "width": 171,
+      "height": 70,
+      "conf": 31
+    },
+    {
+      "text": "7]",
+      "left": 1842,
+      "top": 1167,
+      "width": 104,
+      "height": 43,
+      "conf": 22
+    },
+    {
+      "text": "o",
+      "left": 1914,
+      "top": 1148,
+      "width": 37,
+      "height": 71,
+      "conf": 0
+    },
+    {
+      "text": "=",
+      "left": 991,
+      "top": 1355,
+      "width": 48,
+      "height": 22,
+      "conf": 51
+    },
+    {
+      "text": "aa",
+      "left": 1000,
+      "top": 1373,
+      "width": 44,
+      "height": 35,
+      "conf": 38
+    },
+    {
+      "text": "oF",
+      "left": 830,
+      "top": 1431,
+      "width": 42,
+      "height": 18,
+      "conf": 61
+    },
+    {
+      "text": "\u2014",
+      "left": 1817,
+      "top": 1202,
+      "width": 495,
+      "height": 226,
+      "conf": 71
+    }
+  ]
+}
