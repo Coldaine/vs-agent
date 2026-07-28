@@ -35,11 +35,11 @@
 - Produces: `CodexOAuthConfig`, `CodexOAuthRunner.invoke(role, prompt, schema, image_path=None) -> dict`, `assert_oauth_only_environment()`.
 - Consumes: installed `codex` executable and the existing ChatGPT OAuth session reported by `codex login status`.
 
-- [ ] **Step 1: Write failing tests** proving the default model is `gpt-5.6-luna`, both roles use the same model, forbidden API-key variables are rejected, and the subprocess command includes OAuth-safe flags without any bearer token or API endpoint.
-- [ ] **Step 2: Run** `.venv\Scripts\python.exe -m unittest discover -s tests -p "test_oauth_codex.py" -v` and verify failures are caused by the missing module.
-- [ ] **Step 3: Implement** a dependency-injected subprocess runner. Write JSON Schema and final-output files in a temporary directory, invoke `codex exec`, parse only the final JSON document, and delete the temporary directory automatically.
-- [ ] **Step 4: Run the focused tests** and verify all adapter tests pass.
-- [ ] **Step 5: Commit** with `git commit -m "feat: add ChatGPT OAuth Luna model adapter"`.
+- [x] **Step 1: Write failing tests** proving the default model is `gpt-5.6-luna`, both roles use the same model, forbidden API-key variables are rejected, and the subprocess command includes OAuth-safe flags without any bearer token or API endpoint.
+- [x] **Step 2: Run** `.venv\Scripts\python.exe -m unittest discover -s tests -p "test_oauth_codex.py" -v` and verify failures are caused by the missing module.
+- [x] **Step 3: Implement** a dependency-injected subprocess runner. Write JSON Schema and final-output files in a temporary directory, invoke `codex exec`, parse only the final JSON document, and delete the temporary directory automatically.
+- [x] **Step 4: Run the focused tests** and verify all adapter tests pass.
+- [x] **Step 5: Commit** with `git commit -m "feat: add ChatGPT OAuth Luna model adapter"`.
 
 ### Task 2: Durable LangGraph goal state and nodes
 
