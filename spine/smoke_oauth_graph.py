@@ -1,17 +1,20 @@
-"""No-game smoke for the real LangGraph + ChatGPT Pro OAuth model path.
+"""No-game smoke for the real LangGraph + official Codex SDK model path.
 
-This invokes both the leader and follower as ``gpt-5.6-luna`` through Codex
-OAuth, but uses deterministic in-memory game tools and emits no input.
+The smoke invokes both child roles with ChatGPT-managed Codex authentication.
+Only the deterministic game boundary is fake, and it emits no input.
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
+from collections.abc import Callable
 
 from langgraph.checkpoint.memory import InMemorySaver
 
-from goal_graph import build_goal_graph, initial_state
-from oauth_codex import CodexOAuthRunner
+from agent_subgraphs import AgentRuntime
+from codex_sdk_client import CodexAgentClient
+from goal_graph import build_goal_graph, run_goal
 
 
 class SmokeGameTools:
@@ -45,7 +48,7 @@ class SmokeGameTools:
     def evaluate(self, goal: str, run_id: str) -> dict:
         return {
             "status": "achieved",
-            "reason": "both OAuth roles completed and deterministic tools evaluated",
+            "reason": "both SDK child roles completed with deterministic tools",
             "evidence": ["smoke-outcome"],
         }
 
@@ -56,26 +59,39 @@ class SmokeGameTools:
         return None
 
 
-def run_smoke(model_runner=None) -> dict:
-    runner = model_runner or CodexOAuthRunner()
-    graph = build_goal_graph(runner, SmokeGameTools(), InMemorySaver())
-    return graph.invoke(
-        initial_state(
-            "Prove the LangGraph leader and follower can complete an OAuth-only smoke."
-        ),
-        {"configurable": {"thread_id": "oauth-smoke"}, "recursion_limit": 30},
+async def run_smoke(
+    *,
+    codex_factory: Callable[..., CodexAgentClient] = CodexAgentClient,
+) -> dict:
+    """Exercise both child agents under one SDK lifecycle without game I/O."""
+
+    tools = SmokeGameTools()
+    runtime = AgentRuntime.from_checkpoint(
+        {}, tools, codex_factory=codex_factory
     )
+    graph = build_goal_graph(InMemorySaver())
+    try:
+        await runtime.codex.start()
+        return await run_goal(
+            graph,
+            "Prove the leader and follower complete an official SDK smoke.",
+            "oauth-smoke",
+            runtime,
+        )
+    finally:
+        try:
+            tools.neutralize()
+        finally:
+            await runtime.codex.close()
 
 
 def main() -> int:
-    result = run_smoke()
+    result = asyncio.run(run_smoke())
     print(json.dumps({
         "status": result["status"],
         "reason": result["reason"],
         "evidence": result["evidence"],
-        "authentication": "ChatGPT Pro OAuth via Codex CLI",
-        "leader_model": "gpt-5.6-luna",
-        "follower_model": "gpt-5.6-luna",
+        "authentication": "ChatGPT Pro OAuth via official Codex SDK",
     }))
     return 0 if result["status"] == "achieved" else 2
 

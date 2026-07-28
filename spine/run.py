@@ -1,26 +1,28 @@
 """Run the LangGraph Vampire Survivors goal runtime.
 
-Authentication is CHATGPT PRO OAUTH ONLY through the locally logged-in Codex
-CLI. This entry point does not accept an OpenAI API key, API endpoint, provider
-override, or model override. Both leader and follower use ``gpt-5.6-luna``.
+Authentication is CHATGPT PRO OAUTH ONLY through the official Codex SDK. This
+entry point does not accept an OpenAI API key, API endpoint, provider override,
+or model override.
 """
 
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import os
 import uuid
 from pathlib import Path
 
 import yaml
-from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
+from agent_subgraphs import AgentRuntime
+from codex_sdk_client import CodexAgentClient
 from controller import Controller
 from game_tools import SpineGameTools
 from goal_graph import build_goal_graph, run_goal
 from io_adapter import IOAdapter
-from oauth_codex import CodexOAuthRunner
 
 
 DEFAULT_GOAL = (
@@ -68,7 +70,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def run_langgraph_goal(
+async def run_langgraph_goal(
     goal: str,
     *,
     thread_id: str,
@@ -78,7 +80,7 @@ def run_langgraph_goal(
     attach: bool = False,
     entry_only: bool = False,
 ) -> dict:
-    """Wire LangGraph, ChatGPT OAuth Luna roles, and deterministic game tools."""
+    """Run one goal under one checkpoint-bound Codex SDK lifecycle."""
 
     cfg = yaml.safe_load(Path(config_path).read_text(encoding="utf-8"))
     io = IOAdapter(backend=os.environ.get("VS_IO_BACKEND", "auto"), config=cfg)
@@ -86,38 +88,62 @@ def run_langgraph_goal(
     tools = SpineGameTools(
         cfg, io, controller, attach=attach, entry_only=entry_only
     )
-    model_runner = CodexOAuthRunner()
     checkpoint = Path(checkpoint_path)
     checkpoint.parent.mkdir(parents=True, exist_ok=True)
+    runtime = None
 
     try:
-        with SqliteSaver.from_conn_string(str(checkpoint)) as checkpointer:
-            graph = build_goal_graph(model_runner, tools, checkpointer)
-            return run_goal(graph, goal, thread_id, retries=retries)
+        async with AsyncSqliteSaver.from_conn_string(str(checkpoint)) as checkpointer:
+            graph = build_goal_graph(checkpointer)
+            config = {
+                "configurable": {"thread_id": thread_id},
+                "recursion_limit": 1000,
+            }
+            snapshot = await graph.aget_state(config)
+            runtime = AgentRuntime.from_checkpoint(
+                snapshot.values or {},
+                tools,
+                codex_factory=CodexAgentClient,
+            )
+            await runtime.codex.start()
+            return await run_goal(
+                graph,
+                goal,
+                thread_id,
+                runtime,
+                retries=retries,
+            )
     finally:
-        tools.close()
+        try:
+            tools.neutralize()
+        finally:
+            try:
+                if runtime is not None:
+                    await runtime.codex.close()
+            finally:
+                tools.close()
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     thread_id = args.thread_id or f"goal-{uuid.uuid4()}"
-    state = run_langgraph_goal(
-        args.goal,
-        thread_id=thread_id,
-        retries=args.retries,
-        checkpoint_path=args.checkpoint,
-        config_path=args.config,
-        attach=args.attach,
-        entry_only=args.entry_only,
+    state = asyncio.run(
+        run_langgraph_goal(
+            args.goal,
+            thread_id=thread_id,
+            retries=args.retries,
+            checkpoint_path=args.checkpoint,
+            config_path=args.config,
+            attach=args.attach,
+            entry_only=args.entry_only,
+        )
     )
     print(json.dumps({
         "thread_id": thread_id,
         "status": state["status"],
         "reason": state["reason"],
         "evidence": state["evidence"],
-        "authentication": "ChatGPT Pro OAuth via Codex CLI",
-        "leader_model": "gpt-5.6-luna",
-        "follower_model": "gpt-5.6-luna",
+        "authentication": "ChatGPT Pro OAuth via official Codex SDK",
     }))
     return 0 if state["status"] == "achieved" else 2
 
