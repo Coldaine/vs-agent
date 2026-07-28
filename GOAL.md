@@ -57,10 +57,15 @@ physical check.
 - G0 PLUMBING: fully automated self-verification, human is the
   fallback only:
   a. LAUNCH: `steam steam://rungameid/1794680` (Vampire Survivors app
-     id). Game in windowed mode at a fixed resolution — set once,
-     never change (templates and click coordinates depend on it).
+     id). Game must be **fullscreen** on the fixed capture monitor at
+     one calibrated resolution — set once, never change (click
+     coordinates and the capture-to-hit-test transform depend on it).
+     Do not run scored or vision-menu sessions while the desktop is
+     being used; window focus/size flicker invalidates calibration.
   b. CAPTURE: screenshot returns real frames (not black — if black,
-     switch capture to WGC automatically).
+     switch capture to WGC automatically). Capture resolution must
+     match `capture_calibration_resolution` in spine/config.yaml.
+
   c. KEYS: send one DOWN-arrow at the main menu; verify via
      screenshot diff that the menu highlight moved. If not, try the
      alternate injection path once; if still dead, write

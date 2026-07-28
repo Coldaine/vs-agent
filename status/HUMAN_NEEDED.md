@@ -1,11 +1,21 @@
-# HUMAN_NEEDED — remaining live-game calibration
+# HUMAN_NEEDED — fullscreen + unattended run
 
-No model API key is needed or permitted. Do not launch through Doppler and do not inject `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, or `DEEPSEEK_API_KEY`. The LangGraph runtime uses the existing ChatGPT Pro OAuth session owned by Codex CLI; verify only with `codex login status`.
+No model API key is needed. Auth is ChatGPT Pro OAuth via `codex login status`.
 
-The remaining human-visible work is limited to live-game evidence:
+Before the next vision-menu / G0 attempt:
 
-1. Confirm the fixed window resolution and DPI have not changed since G0 calibration.
-2. Verify the stage-selection UI matches all six explicit modifier values in `spine/config.yaml`: Hyper off, Hurry off, Arcanas off, Limit Break off, Inverse off, Endless off.
-3. Adjudicate only model-label disagreements written to `eval_set/disagreements.json` when G1.5 runs.
+1. Open Vampire Survivors → **Options** → set **Fullscreen** (not windowed).
+2. Leave it on the fixed capture monitor (the one used for WGC / `wgc_monitor_origin`).
+3. Take one screenshot through the agent (or run prepare once) and set
+   `capture_calibration_resolution` in `spine/config.yaml` to that exact
+   fullscreen size. Remove any alternate oscillating windowed sizes.
+4. Run unattended — do not use the desktop while the agent holds focus.
+   Window flicker was what broke the last live entry (2560x1380 ↔ 2562x1479).
 
-Dependencies, Tesseract, and threat weights are already locally present. Gem/elite perception and attach/recovery remain implementation work, not requests for a model credential.
+Suggested unattended command:
+
+```powershell
+.venv\Scripts\python.exe spine\run.py --entry-only --goal "Reach an in-game Mad Forest HUD as Antonio with all six modifiers false. Prefer keyboard. Stop once the run has started." --thread-id "g0-vision-fullscreen"
+```
+
+Adjudicate model-label disagreements in `eval_set/disagreements.json` only when G1.5 runs.
