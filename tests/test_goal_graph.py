@@ -221,21 +221,37 @@ class ParentSubgraphTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(resumed["leader_codex_thread_id"], "leader-thread")
         self.assertEqual(resumed["follower_codex_thread_id"], "follower-thread")
 
-    async def test_parent_rejects_cross_role_binding_before_sdk_resume(self) -> None:
-        codex = ScriptedCodex(thread_bindings={"follower": "leader-prior"})
-        tools = ScriptedTools([{"screen_type": "PLAY", "summary": "safe"}])
-        graph = goal_graph.build_goal_graph(InMemorySaver())
-        state = goal_graph.initial_state("finish", retries=0)
-        state["leader_codex_thread_id"] = "leader-prior"
+    async def test_parent_neutralizes_all_binding_failures_before_sdk_resume(self) -> None:
+        cases = [
+            ("missing", "leader-prior", None, {}, RuntimeError),
+            ("extra", None, None, {"leader": "unexpected"}, RuntimeError),
+            (
+                "cross-role",
+                "leader-prior",
+                None,
+                {"follower": "leader-prior"},
+                RuntimeError,
+            ),
+            ("duplicate", "shared", "shared", {}, ValueError),
+        ]
+        for name, leader_id, follower_id, runtime_bindings, error_type in cases:
+            with self.subTest(name=name):
+                codex = ScriptedCodex(thread_bindings=runtime_bindings)
+                tools = ScriptedTools([{"screen_type": "PLAY", "summary": "safe"}])
+                graph = goal_graph.build_goal_graph(InMemorySaver())
+                state = goal_graph.initial_state("finish", retries=0)
+                state["leader_codex_thread_id"] = leader_id
+                state["follower_codex_thread_id"] = follower_id
 
-        with self.assertRaisesRegex(RuntimeError, "checkpoint.*runtime.*binding"):
-            await graph.ainvoke(
-                state,
-                {"configurable": {"thread_id": "cross-role"}},
-                context=agent_subgraphs.AgentRuntime(codex=codex, tools=tools),
-            )
+                with self.assertRaisesRegex(error_type, "checkpoint"):
+                    await graph.ainvoke(
+                        state,
+                        {"configurable": {"thread_id": f"binding-{name}"}},
+                        context=agent_subgraphs.AgentRuntime(codex=codex, tools=tools),
+                    )
 
-        self.assertEqual(codex.calls, [])
+                self.assertEqual(codex.calls, [])
+                self.assertEqual(tools.calls[-1], "neutralize")
 
 
 class GoalGraphTests(unittest.IsolatedAsyncioTestCase):
@@ -531,6 +547,28 @@ class GoalGraphTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(resumed["phase"], "observed")
         self.assertEqual(tools.calls.count("prepare"), 1)
+        self.assertEqual(model.roles, ["leader", "follower"])
+
+    async def test_run_goal_uses_async_state_lookup_with_async_sqlite(self) -> None:
+        model = ScriptedModel()
+        tools = ScriptedTools([
+            {"screen_type": "PLAY", "summary": "safe"},
+            {"screen_type": "RUN_END", "summary": "done"},
+        ])
+        runtime = agent_subgraphs.AgentRuntime(codex=model, tools=tools)
+        with tempfile.TemporaryDirectory() as root:
+            database = str(Path(root, "run-goal.sqlite3"))
+            async with AsyncSqliteSaver.from_conn_string(database) as checkpointer:
+                graph = goal_graph.build_goal_graph(checkpointer)
+                result = await goal_graph.run_goal(
+                    graph,
+                    "finish",
+                    "async-run-goal",
+                    runtime,
+                    retries=0,
+                )
+
+        self.assertEqual(result["status"], "achieved")
         self.assertEqual(model.roles, ["leader", "follower"])
 
 

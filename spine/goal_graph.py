@@ -103,12 +103,16 @@ def build_goal_graph(
         state: GoalState,
         runtime: Runtime[AgentRuntime],
     ) -> None:
-        expected = checkpoint_thread_bindings(state)
-        actual = runtime.context.codex.thread_bindings
-        if actual != expected:
-            raise RuntimeError(
-                "checkpoint and runtime Codex thread bindings do not match exactly"
-            )
+        try:
+            expected = checkpoint_thread_bindings(state)
+            actual = runtime.context.codex.thread_bindings
+            if actual != expected:
+                raise RuntimeError(
+                    "checkpoint and runtime Codex thread bindings do not match exactly"
+                )
+        except Exception:
+            runtime.context.tools.neutralize()
+            raise
 
     def prepare(state: GoalState, runtime: Runtime[AgentRuntime]) -> dict:
         tools = _runtime_tools(runtime)
@@ -487,7 +491,7 @@ async def run_goal(
         "configurable": {"thread_id": thread_id},
         "recursion_limit": 1000,
     }
-    snapshot = graph.get_state(config)
+    snapshot = await graph.aget_state(config)
     if snapshot.values:
         return await graph.ainvoke(None, config, context=runtime)
     return await graph.ainvoke(

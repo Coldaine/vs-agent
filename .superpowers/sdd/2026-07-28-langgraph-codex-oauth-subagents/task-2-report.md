@@ -127,3 +127,45 @@ routing preservation, and async SQLite checkpoint rebuild/resume.
   `run.py`, the legacy OAuth smoke, and compatibility tests still target the old sync
   API. The written plan assigns those changes and obsolete-adapter deletion to Task 3.
 - No PR was opened; this is a durable Task 2 commit on the existing feature branch.
+
+## Review fix round 1
+
+Addressed both review findings with a new red/green cycle.
+
+### Binding-failure neutralization
+
+The parent binding guard now calls `GameTools.neutralize()` before propagating
+checkpoint extraction failures or runtime-registry mismatches. A table-driven parent
+test covers missing, extra, cross-role, and duplicate bindings, proves the SDK was not
+called, and requires `neutralize` to be the final tool call.
+
+### Async durable state lookup
+
+`run_goal` now awaits `graph.aget_state(config)` rather than calling synchronous
+`graph.get_state(config)`. The regression test uses a real `AsyncSqliteSaver` and runs
+the complete durable goal path.
+
+### RED
+
+Command:
+
+```powershell
+.venv\Scripts\python.exe -m unittest tests.test_goal_graph.ParentSubgraphTests.test_parent_neutralizes_all_binding_failures_before_sdk_resume tests.test_goal_graph.GoalGraphTests.test_run_goal_uses_async_state_lookup_with_async_sqlite -v
+```
+
+Result: exit 1. All four binding cases failed because the final tool call was
+`observe`, not `neutralize`; `run_goal` raised `asyncio.exceptions.InvalidStateError`
+because it called synchronous `get_state` on `AsyncSqliteSaver`.
+
+### GREEN
+
+The same two-test command exited 0 with 2 tests passed.
+
+Final focused command:
+
+```powershell
+.venv\Scripts\python.exe -m unittest tests.test_codex_sdk_client tests.test_agent_subgraphs tests.test_goal_graph -v
+```
+
+Result: exit 0, 31 tests passed. Python compilation and `git diff --check` also
+completed with exit 0.
