@@ -17,9 +17,11 @@ import goal_graph  # noqa: E402
 class ScriptedModel:
     def __init__(self) -> None:
         self.roles: list[str] = []
+        self.image_paths: list[tuple[str, object]] = []
 
     def invoke(self, role: str, prompt: str, schema: dict, image_path=None) -> dict:
         self.roles.append(role)
+        self.image_paths.append((role, image_path))
         if role == "leader":
             if "LEVEL_UP" in prompt:
                 return {"intent": "choose upgrade", "option": 2, "reason": "damage"}
@@ -45,8 +47,8 @@ class ScriptedTools:
         self.calls.append("observe")
         return self.observations.pop(0)
 
-    def submit_direction(self, direction: str) -> bool:
-        self.calls.append(("submit_direction", direction))
+    def submit_direction(self, direction: str, latency_ms: float) -> bool:
+        self.calls.append(("submit_direction", direction, latency_ms))
         return direction in {"N", "NE", "E", "SE", "S", "SW", "W", "NW", "HOLD"}
 
     def control_window(self, seconds: float) -> dict:
@@ -69,10 +71,13 @@ class GoalGraphTests(unittest.TestCase):
     def test_play_cycle_uses_leader_then_follower_and_ends_on_evidence(self) -> None:
         model = ScriptedModel()
         tools = ScriptedTools([
-            {"screen_type": "PLAY", "summary": "clear northeast"},
+            {"screen_type": "PLAY", "summary": "clear northeast", "image_path": "frame.jpg"},
             {"screen_type": "RUN_END", "summary": "run ended"},
         ])
-        graph = goal_graph.build_goal_graph(model, tools, InMemorySaver())
+        times = iter([10.0, 10.321])
+        graph = goal_graph.build_goal_graph(
+            model, tools, InMemorySaver(), clock=lambda: next(times)
+        )
 
         result = graph.invoke(
             goal_graph.initial_state("survive at least 9 minutes", retries=1),
@@ -81,8 +86,11 @@ class GoalGraphTests(unittest.TestCase):
 
         self.assertEqual(result["status"], "achieved")
         self.assertEqual(model.roles, ["leader", "follower"])
-        self.assertIn(("submit_direction", "NE"), tools.calls)
+        submission = next(call for call in tools.calls if call[0] == "submit_direction")
+        self.assertEqual(submission[:2], ("submit_direction", "NE"))
+        self.assertAlmostEqual(submission[2], 321.0)
         self.assertIn(("control_window", 2.0), tools.calls)
+        self.assertEqual(model.image_paths[-1], ("follower", Path("frame.jpg")))
         self.assertEqual(result["evidence"], ["tick-1", "outcome.json"])
         self.assertEqual(tools.calls[-1], "neutralize")
 

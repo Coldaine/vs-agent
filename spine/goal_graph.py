@@ -8,6 +8,8 @@ authority over capture, input, safety, and evidence.
 from __future__ import annotations
 
 import json
+import time
+from pathlib import Path
 from typing import Any, Literal, Protocol, TypedDict
 
 from langgraph.graph import END, START, StateGraph
@@ -42,7 +44,7 @@ class ModelRunner(Protocol):
 class GameTools(Protocol):
     def prepare(self) -> dict: ...
     def observe(self) -> dict: ...
-    def submit_direction(self, direction: str) -> bool: ...
+    def submit_direction(self, direction: str, latency_ms: float) -> bool: ...
     def control_window(self, seconds: float) -> dict: ...
     def select_level_up(self, option: int) -> dict: ...
     def evaluate(self, goal: str, run_id: str) -> dict: ...
@@ -100,6 +102,7 @@ def build_goal_graph(
     checkpointer,
     *,
     pause_after_observe: bool = False,
+    clock=time.monotonic,
 ):
     """Compile the goal graph with an injected model and game boundary."""
 
@@ -142,7 +145,11 @@ def build_goal_graph(
             "Return the high-level intent. On LEVEL_UP, option must be the "
             "one-based option index. Otherwise option must be null."
         )
-        decision = model_runner.invoke("leader", prompt, LEADER_SCHEMA)
+        image_value = observation.get("image_path")
+        image_path = Path(image_value) if image_value else None
+        decision = model_runner.invoke(
+            "leader", prompt, LEADER_SCHEMA, image_path=image_path
+        )
         return {"phase": "planned", "leader_decision": decision}
 
     def route_leader(state: GoalState) -> str:
@@ -156,12 +163,19 @@ def build_goal_graph(
             f"Observation: {json.dumps(state['observation'], sort_keys=True)}\n"
             "Return one movement proposal. The deterministic controller may veto it."
         )
-        proposal = model_runner.invoke("follower", prompt, FOLLOWER_SCHEMA)
+        image_value = (state["observation"] or {}).get("image_path")
+        image_path = Path(image_value) if image_value else None
+        started = clock()
+        proposal = model_runner.invoke(
+            "follower", prompt, FOLLOWER_SCHEMA, image_path=image_path
+        )
+        proposal = {**proposal, "latency_ms": (clock() - started) * 1000.0}
         return {"phase": "proposed", "follower_proposal": proposal}
 
     def control(state: GoalState) -> dict:
         direction = str((state["follower_proposal"] or {}).get("direction", ""))
-        if not tools.submit_direction(direction):
+        latency_ms = float((state["follower_proposal"] or {}).get("latency_ms", 0.0))
+        if not tools.submit_direction(direction, latency_ms):
             tools.neutralize()
             return {
                 "phase": "blocked",

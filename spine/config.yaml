@@ -9,7 +9,15 @@ gem_pull_weight: 0.3
 # eval conditions (FIXED — never change and compare scores across)
 stage: "Mad Forest"
 character: "Antonio"
+# All six modifiers are explicit because "default modifiers" is not a
+# reproducible evaluation condition. The menu adapter must verify this baseline.
+hyper: false
+hurry: false
 arcanas: false
+limit_break: false
+inverse: false
+endless: false
+goal_target_survival_s: 540
 
 # perception
 level_up_ocr_trigger: "LEVEL UP"

@@ -1,144 +1,104 @@
-"""run.py — one episode of Vampire Survivors.
+"""Run the LangGraph Vampire Survivors goal runtime.
 
-Usage:
-  python spine/run.py                  # one episode
-  python spine/run.py --seed-set eval  # eval episode (fixed conditions)
-
-Structure: perception (YOLO+OCR, builder's seam) -> pilot proposal
-(async, OpenAI-compatible endpoint) -> controller (deterministic) ->
-trace. Level-up screens hand off to the planner. Every exit path
-neutralizes the controller — no runaway held inputs overnight.
+Authentication is CHATGPT PRO OAUTH ONLY through the locally logged-in Codex
+CLI. This entry point does not accept an OpenAI API key, API endpoint, provider
+override, or model override. Both leader and follower use ``gpt-5.6-luna``.
 """
 
 from __future__ import annotations
-import argparse, json, os, sys, time, threading
+
+import argparse
+import json
+import os
+import uuid
+from pathlib import Path
+
 import yaml
-from io_adapter import IOAdapter
+from langgraph.checkpoint.sqlite import SqliteSaver
+
 from controller import Controller
-from trace import EpisodeWriter, hash_prompt
-import reflex
-import launch
-import model_client          # builder: OpenAI-compatible client wrapper
-import perceive              # builder: YOLO detections + OCR state
+from game_tools import SpineGameTools
+from goal_graph import build_goal_graph, run_goal
+from io_adapter import IOAdapter
+from oauth_codex import CodexOAuthRunner
 
 
-def follower_loop(io, controller, cfg, stop, prompt_text, shared):
-    """Async pilot: proposes directions without blocking the tick.
-    Reads shared['brief'] EVERY iteration so planner brief_updates
-    propagate — passing brief by value here was bug #1 found in audit."""
-    while not stop.is_set():
-        try:
-            frame = io.screenshot()
-            state = perceive.state_summary(frame)
-            t0 = time.monotonic()
-            direction, _speed = model_client.call_pilot(
-                prompt_text, state, frame, shared["brief"])
-            latency = (time.monotonic() - t0) * 1000
-            if not controller.submit_follower_proposal(direction, latency):
-                perceive.log_protocol_violation(direction)
-        except Exception as e:
-            print(f"[pilot] {e}", file=sys.stderr)
-            time.sleep(0.1)
+DEFAULT_GOAL = (
+    "Complete a fixed-condition Mad Forest run and produce deterministic "
+    "evidence that survival reached at least 540 seconds."
+)
 
 
-def _detect_for_tick(frame, reflex_only: bool):
-    """G1 remains usable when the optional detector is unavailable."""
-    try:
-        return perceive.detect(frame)
-    except (FileNotFoundError, ImportError, RuntimeError) as error:
-        if not reflex_only:
-            raise
-        print(f"[reflex-only] detector unavailable: {error}", file=sys.stderr)
-        return [], reflex.Detection(frame.width / 2.0, frame.height / 2.0, "player")
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Run the LangGraph leader/follower through ChatGPT Pro OAuth. "
+            "OpenAI API keys and compatible HTTP APIs are forbidden."
+        )
+    )
+    parser.add_argument("--goal", default=DEFAULT_GOAL)
+    parser.add_argument(
+        "--thread-id",
+        default=None,
+        help="Durable LangGraph thread to create or resume (default: generated)",
+    )
+    parser.add_argument("--retries", type=int, default=0)
+    parser.add_argument(
+        "--checkpoint",
+        default="runtime/langgraph-goals.sqlite3",
+        help="Local LangGraph checkpoint database",
+    )
+    parser.add_argument("--config", default="spine/config.yaml")
+    return parser
 
 
-def run_episode(eval_mode: bool, reflex_only: bool = False, disable_leader: bool = False):
-    cfg = yaml.safe_load(open("spine/config.yaml"))
+def run_langgraph_goal(
+    goal: str,
+    *,
+    thread_id: str,
+    retries: int,
+    checkpoint_path: str,
+    config_path: str,
+) -> dict:
+    """Wire LangGraph, ChatGPT OAuth Luna roles, and deterministic game tools."""
+
+    cfg = yaml.safe_load(Path(config_path).read_text(encoding="utf-8"))
     io = IOAdapter(backend=os.environ.get("VS_IO_BACKEND", "auto"), config=cfg)
     controller = Controller(io, cfg)
-    run_id = f"run_{int(time.time())}"
-    ep = EpisodeWriter(cfg["episodes_dir"], run_id)
-    pilot_prompt = open("prompts/pilot.md").read() if not reflex_only else ""
-    planner_prompt = open("prompts/planner.md").read() if not disable_leader else ""
-    # Mutable cell so the planner's brief update reaches the pilot.
-    shared = {"brief": "Early game: farm gems near open ground, orbit clockwise."}
-    stop = threading.Event()
-    latencies, start = [], time.monotonic()
+    tools = SpineGameTools(cfg, io, controller)
+    model_runner = CodexOAuthRunner()
+    checkpoint = Path(checkpoint_path)
+    checkpoint.parent.mkdir(parents=True, exist_ok=True)
 
     try:
-        launch.to_stage_select(io, cfg)          # launch + menu macro
-        launch.start_run(io, cfg)
-        
-        if not reflex_only:
-            fw = threading.Thread(target=follower_loop,
-                                args=(io, controller, cfg, stop,
-                                        pilot_prompt, shared), daemon=True)
-            fw.start()
-
-        tick_s = 1.0 / cfg["tick_hz"]
-        while True:
-            tick_t0 = time.monotonic()
-            frame = io.screenshot()
-            screen_type = perceive.screen_type(frame, cfg)
-
-            if screen_type == "LEVEL_UP":
-                options = perceive.read_options(frame)
-                if not disable_leader:
-                    pick = model_client.call_planner(planner_prompt, frame,
-                                                    options, shared["brief"])
-                    ep.log_planner(options, pick["pick"], pick["why"],
-                                pick["brief_update"])
-                    shared["brief"] = pick["brief_update"]
-                    launch.select_option(io, pick["pick"], options)
-                else:
-                    # Default to option 1 if leader disabled
-                    launch.select_option(io, 1, options)
-                continue
-
-            if screen_type in ("DEATH", "RUN_END"):
-                break
-
-            dets, player = _detect_for_tick(frame, reflex_only)
-            result = controller.tick(dets, player, screen_type, strafe=reflex_only)
-            if result.follower_latency_ms:
-                latencies.append(result.follower_latency_ms)
-            st = perceive.hud_state(frame)
-            ep.log_tick(st["hp"], st["level"], st["timer"],
-                        st["inventory"],
-                        reflex.threats_by_octant(dets, player),
-                        reflex.gems_by_octant(dets, player),
-                        result.rule_fired, result.follower_latency_ms,
-                        result.action, result.rule_fired == "veto")
-            ep.save_frame(perceive.to_jpeg(frame))
-
-            elapsed = time.monotonic() - tick_t0
-            if elapsed < tick_s:
-                time.sleep(tick_s - elapsed)
-
+        with SqliteSaver.from_conn_string(str(checkpoint)) as checkpointer:
+            graph = build_goal_graph(model_runner, tools, checkpointer)
+            return run_goal(graph, goal, thread_id, retries=retries)
     finally:
-        stop.set()
-        controller.neutralize()          # every exit path, no exceptions
-        io.close()
-        survived = time.monotonic() - start
-        p95 = (sorted(latencies)[int(len(latencies) * .95)]
-               if latencies else 0)
-        invalid = p95 > 800
-        ep.close(survived_s=round(survived, 1),
-                 level=perceive.last_level, kills=perceive.last_kills,
-                 invalid=invalid,
-                  prompt_hashes={"pilot": hash_prompt("prompts/pilot.md"),
-                                 "planner": hash_prompt("prompts/planner.md")})
-        print(json.dumps({"run_id": run_id, "survived_s": survived,
-                          "invalid": invalid, "p95_ms": p95}))
+        tools.close()
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    thread_id = args.thread_id or f"goal-{uuid.uuid4()}"
+    state = run_langgraph_goal(
+        args.goal,
+        thread_id=thread_id,
+        retries=args.retries,
+        checkpoint_path=args.checkpoint,
+        config_path=args.config,
+    )
+    print(json.dumps({
+        "thread_id": thread_id,
+        "status": state["status"],
+        "reason": state["reason"],
+        "evidence": state["evidence"],
+        "authentication": "ChatGPT Pro OAuth via Codex CLI",
+        "leader_model": "gpt-5.6-luna",
+        "follower_model": "gpt-5.6-luna",
+    }))
+    return 0 if state["status"] == "achieved" else 2
 
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--seed-set", default=None)
-    ap.add_argument("--reflex-only", action="store_true")
-    ap.add_argument("--disable-planner", "--disable-leader",
-                    dest="disable_leader", action="store_true")
-    args = ap.parse_args()
-    run_episode(eval_mode=args.seed_set == "eval",
-                reflex_only=args.reflex_only,
-                disable_leader=args.disable_leader)
+    raise SystemExit(main())

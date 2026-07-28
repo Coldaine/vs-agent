@@ -69,11 +69,11 @@
 - Produces: `SpineGameTools.prepare()`, `observe()`, `submit_direction()`, `control_window()`, `select_level_up()`, `evaluate()`, and `neutralize()`.
 - Consumes: `IOAdapter`, `Controller`, `perceive`, `launch`, and `EpisodeWriter`.
 
-- [ ] **Step 1: Write failing tests** proving model proposals cannot bypass `Controller`, control windows are time-bounded, invalid directions are rejected, and exceptions always neutralize input.
-- [ ] **Step 2: Run** `.venv\Scripts\python.exe -m unittest discover -s tests -p "test_game_tools.py" -v` and verify expected failures.
-- [ ] **Step 3: Implement** the adapter without duplicating capture, perception, input, or trace logic.
-- [ ] **Step 4: Add a `--goal` LangGraph entry path** to `spine/run.py`; preserve the legacy path temporarily for comparison, clearly labeled deprecated.
-- [ ] **Step 5: Run focused and complete tests**, then commit with `git commit -m "feat: connect LangGraph to bounded game tools"`.
+- [x] **Step 1: Write failing tests** proving model proposals cannot bypass `Controller`, control windows are time-bounded, invalid directions are rejected, and exceptions always neutralize input.
+- [x] **Step 2: Run** `.venv\Scripts\python.exe -m unittest discover -s tests -p "test_game_tools.py" -v` and verify expected failures.
+- [x] **Step 3: Implement** the adapter without duplicating capture, perception, input, or trace logic.
+- [x] **Step 4: Make `--goal` the only model-driven entry path** in `spine/run.py`; the old API-backed orchestration path is removed rather than retained as a silent fallback.
+- [x] **Step 5: Run focused and complete tests**, then commit with `git commit -m "feat: connect LangGraph to bounded game tools"`.
 
 ### Task 4: Authority and operator documentation
 
