@@ -11,8 +11,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "spine"))
 
 from langgraph.checkpoint.memory import InMemorySaver  # noqa: E402
-from langgraph.checkpoint.sqlite import SqliteSaver  # noqa: E402
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver  # noqa: E402
 
+import agent_subgraphs  # noqa: E402
+from codex_sdk_client import CodexInvocation  # noqa: E402
 import goal_graph  # noqa: E402
 
 
@@ -21,24 +23,50 @@ class ScriptedModel:
         self.roles: list[str] = []
         self.image_paths: list[tuple[str, object]] = []
         self.schemas: list[dict] = []
+        self._thread_bindings: dict[str, str] = {}
 
-    def invoke(self, role: str, prompt: str, schema: dict, image_path=None) -> dict:
+    @property
+    def thread_bindings(self) -> dict[str, str]:
+        return dict(self._thread_bindings)
+
+    async def invoke(
+        self,
+        role: str,
+        prompt: str,
+        schema: dict,
+        image_path=None,
+        thread_id: str | None = None,
+    ) -> CodexInvocation:
         self.roles.append(role)
         self.image_paths.append((role, image_path))
         self.schemas.append(schema)
         if role == "leader":
             if schema is goal_graph.MENU_LEADER_SCHEMA or "Menu steps remaining" in prompt:
-                return {
+                payload = {
                     "screen": "CHARACTER_SELECT",
                     "action": "confirm",
                     "click": None,
                     "ready_for_run": False,
                     "reason": "advance",
                 }
-            if "LEVEL_UP" in prompt:
-                return {"intent": "choose upgrade", "option": 2, "reason": "damage"}
-            return {"intent": "farm open ground", "option": None, "reason": "safe growth"}
-        return {"direction": "NE", "confidence": 0.8, "reason": "open lane"}
+            elif "LEVEL_UP" in prompt:
+                payload = {"intent": "choose upgrade", "option": 2, "reason": "damage"}
+            else:
+                payload = {
+                    "intent": "farm open ground",
+                    "option": None,
+                    "reason": "safe growth",
+                }
+        else:
+            payload = {"direction": "NE", "confidence": 0.8, "reason": "open lane"}
+        assigned_thread = thread_id or f"{role}-thread"
+        self._thread_bindings[role] = assigned_thread
+        return CodexInvocation(
+            payload=payload,
+            thread_id=assigned_thread,
+            turn_id=f"{role}-turn-{len(self.roles)}",
+            usage=None,
+        )
 
 
 class ScriptedTools:
@@ -115,21 +143,115 @@ class ScriptedTools:
         self.calls.append("neutralize")
 
 
-class GoalGraphTests(unittest.TestCase):
-    def test_play_cycle_uses_leader_then_follower_and_ends_on_evidence(self) -> None:
+class ScriptedCodex:
+    def __init__(self, *, thread_bindings: dict[str, str] | None = None) -> None:
+        self.calls: list[dict] = []
+        self._thread_bindings = dict(thread_bindings or {})
+
+    @property
+    def thread_bindings(self) -> dict[str, str]:
+        return dict(self._thread_bindings)
+
+    async def invoke(
+        self,
+        role: str,
+        prompt: str,
+        schema: dict,
+        image_path=None,
+        thread_id: str | None = None,
+    ) -> CodexInvocation:
+        self.calls.append({
+            "role": role,
+            "prompt": prompt,
+            "schema": schema,
+            "image_path": image_path,
+            "thread_id": thread_id,
+        })
+        assigned_thread = thread_id or f"{role}-thread"
+        self._thread_bindings[role] = assigned_thread
+        if role == "leader":
+            payload = {"intent": "farm", "option": None, "reason": "safe"}
+        else:
+            payload = {"direction": "NE", "confidence": 0.8, "reason": "clear"}
+        return CodexInvocation(
+            payload=payload,
+            thread_id=assigned_thread,
+            turn_id=f"{role}-turn-{len(self.calls)}",
+            usage=None,
+        )
+
+
+class ParentSubgraphTests(unittest.IsolatedAsyncioTestCase):
+    async def test_parent_resume_keeps_child_namespace_and_does_not_repeat_leader(self) -> None:
+        codex = ScriptedCodex()
+        tools = ScriptedTools([
+            {"screen_type": "PLAY", "summary": "safe", "image_path": "frame.jpg"},
+            {"screen_type": "RUN_END", "summary": "done"},
+        ])
+        checkpointer = InMemorySaver()
+        graph = goal_graph.build_goal_graph(checkpointer, pause_after_leader=True)
+        runtime = agent_subgraphs.AgentRuntime(codex=codex, tools=tools)
+        config = {
+            "configurable": {"thread_id": "child-resume"},
+            "recursion_limit": 30,
+        }
+
+        paused = await graph.ainvoke(
+            goal_graph.initial_state("finish", retries=0),
+            config,
+            context=runtime,
+        )
+
+        self.assertEqual(paused["phase"], "planned")
+        self.assertEqual(paused["leader_codex_thread_id"], "leader-thread")
+        self.assertEqual([call["role"] for call in codex.calls], ["leader"])
+        namespaces = {
+            item.config["configurable"].get("checkpoint_ns", "")
+            for item in checkpointer.list(None)
+            if item.config["configurable"].get("thread_id") == "child-resume"
+        }
+        self.assertTrue(any("leader" in namespace for namespace in namespaces))
+
+        resumed = await graph.ainvoke(None, config, context=runtime)
+
+        self.assertEqual(resumed["status"], "achieved")
+        self.assertEqual(
+            [call["role"] for call in codex.calls], ["leader", "follower"]
+        )
+        self.assertEqual(resumed["leader_codex_thread_id"], "leader-thread")
+        self.assertEqual(resumed["follower_codex_thread_id"], "follower-thread")
+
+    async def test_parent_rejects_cross_role_binding_before_sdk_resume(self) -> None:
+        codex = ScriptedCodex(thread_bindings={"follower": "leader-prior"})
+        tools = ScriptedTools([{"screen_type": "PLAY", "summary": "safe"}])
+        graph = goal_graph.build_goal_graph(InMemorySaver())
+        state = goal_graph.initial_state("finish", retries=0)
+        state["leader_codex_thread_id"] = "leader-prior"
+
+        with self.assertRaisesRegex(RuntimeError, "checkpoint.*runtime.*binding"):
+            await graph.ainvoke(
+                state,
+                {"configurable": {"thread_id": "cross-role"}},
+                context=agent_subgraphs.AgentRuntime(codex=codex, tools=tools),
+            )
+
+        self.assertEqual(codex.calls, [])
+
+
+class GoalGraphTests(unittest.IsolatedAsyncioTestCase):
+    async def test_play_cycle_uses_leader_then_follower_and_ends_on_evidence(self) -> None:
         model = ScriptedModel()
         tools = ScriptedTools([
             {"screen_type": "PLAY", "summary": "clear northeast", "image_path": "frame.jpg"},
             {"screen_type": "RUN_END", "summary": "run ended"},
         ])
         times = iter([10.0, 10.321])
-        graph = goal_graph.build_goal_graph(
-            model, tools, InMemorySaver(), clock=lambda: next(times)
-        )
+        graph = goal_graph.build_goal_graph(InMemorySaver(), clock=lambda: next(times))
 
-        result = graph.invoke(
+        result = await graph.ainvoke(
             goal_graph.initial_state("survive at least 9 minutes", retries=1),
             {"configurable": {"thread_id": "play-cycle"}, "recursion_limit": 30},
+            context=agent_subgraphs.AgentRuntime(codex=model, tools=tools),
         )
 
         self.assertEqual(result["status"], "achieved")
@@ -142,33 +264,37 @@ class GoalGraphTests(unittest.TestCase):
         self.assertEqual(result["evidence"], ["tick-1", "outcome.json"])
         self.assertEqual(tools.calls[-1], "neutralize")
 
-    def test_menu_observation_routes_to_vision_leader_not_blocked(self) -> None:
+    async def test_menu_observation_routes_to_vision_leader_not_blocked(self) -> None:
         class MenuThenPlay(ScriptedModel):
             def __init__(self) -> None:
                 super().__init__()
                 self.menu_calls = 0
 
-            def invoke(self, role: str, prompt: str, schema: dict, image_path=None) -> dict:
+            async def invoke(self, role, prompt, schema, image_path=None, thread_id=None):
                 if "Menu steps remaining" in prompt:
                     self.menu_calls += 1
                     self.roles.append(role)
                     self.schemas.append(schema)
                     if self.menu_calls == 1:
-                        return {
+                        payload = {
                             "screen": "CHARACTER_SELECT",
                             "action": "confirm",
                             "click": None,
                             "ready_for_run": False,
                             "reason": "confirm antonio",
                         }
-                    return {
+                    else:
+                        payload = {
                         "screen": "IN_GAME",
                         "action": "wait",
                         "click": None,
                         "ready_for_run": True,
                         "reason": "hud visible",
-                    }
-                return super().invoke(role, prompt, schema, image_path)
+                        }
+                    assigned = thread_id or "leader-thread"
+                    self._thread_bindings[role] = assigned
+                    return CodexInvocation(payload, assigned, "menu-turn", None)
+                return await super().invoke(role, prompt, schema, image_path, thread_id)
 
         model = MenuThenPlay()
         tools = ScriptedTools(
@@ -188,11 +314,12 @@ class GoalGraphTests(unittest.TestCase):
             ],
             entry_only=True,
         )
-        graph = goal_graph.build_goal_graph(model, tools, InMemorySaver())
+        graph = goal_graph.build_goal_graph(InMemorySaver())
 
-        result = graph.invoke(
+        result = await graph.ainvoke(
             goal_graph.initial_state("reach Mad Forest HUD", retries=0),
             {"configurable": {"thread_id": "menu-route"}, "recursion_limit": 40},
+            context=agent_subgraphs.AgentRuntime(codex=model, tools=tools),
         )
 
         self.assertEqual(result["status"], "achieved")
@@ -204,7 +331,7 @@ class GoalGraphTests(unittest.TestCase):
             any(schema is goal_graph.MENU_LEADER_SCHEMA for schema in model.schemas)
         )
 
-    def test_ocr_hint_alone_cannot_force_play_transition(self) -> None:
+    async def test_ocr_hint_alone_cannot_force_play_transition(self) -> None:
         model = ScriptedModel()
         tools = ScriptedTools(
             [
@@ -224,11 +351,12 @@ class GoalGraphTests(unittest.TestCase):
             entry_only=True,
             menu_steps_budget=1,
         )
-        graph = goal_graph.build_goal_graph(model, tools, InMemorySaver())
+        graph = goal_graph.build_goal_graph(InMemorySaver())
 
-        result = graph.invoke(
+        result = await graph.ainvoke(
             goal_graph.initial_state("reach HUD", retries=0),
             {"configurable": {"thread_id": "ocr-not-authority"}, "recursion_limit": 20},
+            context=agent_subgraphs.AgentRuntime(codex=model, tools=tools),
         )
 
         # One menu action then budget exhausted — never promoted by OCR hint text.
@@ -236,17 +364,19 @@ class GoalGraphTests(unittest.TestCase):
         self.assertIn("menu step budget", result["reason"])
         self.assertNotIn("mark_in_game", tools.calls)
 
-    def test_menu_budget_exhaustion_neutralizes_and_blocks(self) -> None:
+    async def test_menu_budget_exhaustion_neutralizes_and_blocks(self) -> None:
         class AlwaysMenu(ScriptedModel):
-            def invoke(self, role: str, prompt: str, schema: dict, image_path=None) -> dict:
+            async def invoke(self, role, prompt, schema, image_path=None, thread_id=None):
                 self.roles.append(role)
-                return {
+                assigned = thread_id or "leader-thread"
+                self._thread_bindings[role] = assigned
+                return CodexInvocation({
                     "screen": "STAGE_SELECT",
                     "action": "down",
                     "click": None,
                     "ready_for_run": False,
                     "reason": "still looking",
-                }
+                }, assigned, "menu-turn", None)
 
         model = AlwaysMenu()
         tools = ScriptedTools(
@@ -254,42 +384,45 @@ class GoalGraphTests(unittest.TestCase):
             entry_only=True,
             menu_steps_budget=2,
         )
-        graph = goal_graph.build_goal_graph(model, tools, InMemorySaver())
+        graph = goal_graph.build_goal_graph(InMemorySaver())
 
-        result = graph.invoke(
+        result = await graph.ainvoke(
             goal_graph.initial_state("reach HUD", retries=0),
             {"configurable": {"thread_id": "budget"}, "recursion_limit": 30},
+            context=agent_subgraphs.AgentRuntime(codex=model, tools=tools),
         )
 
         self.assertEqual(result["status"], "blocked")
         self.assertIn("budget", result["reason"])
         self.assertEqual(tools.calls[-1], "neutralize")
 
-    def test_level_up_routes_to_leader_without_calling_follower(self) -> None:
+    async def test_level_up_routes_to_leader_without_calling_follower(self) -> None:
         model = ScriptedModel()
         tools = ScriptedTools([
             {"screen_type": "LEVEL_UP", "summary": "three options"},
             {"screen_type": "RUN_END", "summary": "run ended"},
         ])
-        graph = goal_graph.build_goal_graph(model, tools, InMemorySaver())
+        graph = goal_graph.build_goal_graph(InMemorySaver())
 
-        result = graph.invoke(
+        result = await graph.ainvoke(
             goal_graph.initial_state("complete one run", retries=0),
             {"configurable": {"thread_id": "level-up"}, "recursion_limit": 30},
+            context=agent_subgraphs.AgentRuntime(codex=model, tools=tools),
         )
 
         self.assertEqual(result["status"], "achieved")
         self.assertEqual(model.roles, ["leader"])
         self.assertIn(("select_level_up", 2), tools.calls)
 
-    def test_safety_fault_neutralizes_and_blocks_without_model_call(self) -> None:
+    async def test_safety_fault_neutralizes_and_blocks_without_model_call(self) -> None:
         model = ScriptedModel()
         tools = ScriptedTools([{"screen_type": "SAFETY_FAULT", "summary": "capture lost"}])
-        graph = goal_graph.build_goal_graph(model, tools, InMemorySaver())
+        graph = goal_graph.build_goal_graph(InMemorySaver())
 
-        result = graph.invoke(
+        result = await graph.ainvoke(
             goal_graph.initial_state("complete one run", retries=1),
             {"configurable": {"thread_id": "fault"}},
+            context=agent_subgraphs.AgentRuntime(codex=model, tools=tools),
         )
 
         self.assertEqual(result["status"], "blocked")
@@ -297,28 +430,36 @@ class GoalGraphTests(unittest.TestCase):
         self.assertEqual(model.roles, [])
         self.assertEqual(tools.calls[-1], "neutralize")
 
-    def test_rejected_follower_direction_neutralizes_and_blocks(self) -> None:
+    async def test_rejected_follower_direction_neutralizes_and_blocks(self) -> None:
         class InvalidFollower(ScriptedModel):
-            def invoke(self, role: str, prompt: str, schema: dict, image_path=None) -> dict:
+            async def invoke(self, role, prompt, schema, image_path=None, thread_id=None):
                 if role == "follower":
                     self.roles.append(role)
-                    return {"direction": "TELEPORT", "confidence": 1.0, "reason": "invalid"}
-                return super().invoke(role, prompt, schema, image_path)
+                    assigned = thread_id or "follower-thread"
+                    self._thread_bindings[role] = assigned
+                    return CodexInvocation(
+                        {"direction": "TELEPORT", "confidence": 1.0, "reason": "invalid"},
+                        assigned,
+                        "follower-turn",
+                        None,
+                    )
+                return await super().invoke(role, prompt, schema, image_path, thread_id)
 
         model = InvalidFollower()
         tools = ScriptedTools([{"screen_type": "PLAY", "summary": "open"}])
-        graph = goal_graph.build_goal_graph(model, tools, InMemorySaver())
+        graph = goal_graph.build_goal_graph(InMemorySaver())
 
-        result = graph.invoke(
+        result = await graph.ainvoke(
             goal_graph.initial_state("complete one run", retries=0),
             {"configurable": {"thread_id": "invalid-direction"}},
+            context=agent_subgraphs.AgentRuntime(codex=model, tools=tools),
         )
 
         self.assertEqual(result["status"], "blocked")
         self.assertIn("TELEPORT", result["reason"])
         self.assertEqual(tools.calls[-1], "neutralize")
 
-    def test_not_met_evaluation_retries_only_within_budget(self) -> None:
+    async def test_not_met_evaluation_retries_only_within_budget(self) -> None:
         model = ScriptedModel()
         tools = ScriptedTools(
             [
@@ -327,39 +468,41 @@ class GoalGraphTests(unittest.TestCase):
             ],
             evaluation={"status": "not_met", "reason": "too short", "evidence": []},
         )
-        graph = goal_graph.build_goal_graph(model, tools, InMemorySaver())
+        graph = goal_graph.build_goal_graph(InMemorySaver())
 
-        result = graph.invoke(
+        result = await graph.ainvoke(
             goal_graph.initial_state("survive 9 minutes", retries=1),
             {"configurable": {"thread_id": "retry-budget"}, "recursion_limit": 30},
+            context=agent_subgraphs.AgentRuntime(codex=model, tools=tools),
         )
 
         self.assertEqual(result["status"], "not_met")
         self.assertEqual(result["retries_left"], 0)
         self.assertEqual(tools.calls.count("prepare"), 2)
 
-    def test_checkpoint_resume_continues_after_observation_without_repreparing(self) -> None:
+    async def test_checkpoint_resume_continues_after_observation_without_repreparing(self) -> None:
         model = ScriptedModel()
         tools = ScriptedTools([
             {"screen_type": "PLAY", "summary": "safe"},
             {"screen_type": "RUN_END", "summary": "done"},
         ])
-        graph = goal_graph.build_goal_graph(
-            model, tools, InMemorySaver(), pause_after_observe=True
-        )
+        graph = goal_graph.build_goal_graph(InMemorySaver(), pause_after_observe=True)
         config = {"configurable": {"thread_id": "resume"}, "recursion_limit": 30}
+        runtime = agent_subgraphs.AgentRuntime(codex=model, tools=tools)
 
-        paused = graph.invoke(goal_graph.initial_state("finish", retries=0), config)
+        paused = await graph.ainvoke(
+            goal_graph.initial_state("finish", retries=0), config, context=runtime
+        )
         self.assertEqual(paused["phase"], "observed")
         self.assertEqual(tools.calls.count("prepare"), 1)
 
-        resumed = graph.invoke(None, config)
+        resumed = await graph.ainvoke(None, config, context=runtime)
 
         self.assertEqual(resumed["phase"], "observed")
         self.assertEqual(tools.calls.count("prepare"), 1)
         self.assertEqual(model.roles, ["leader", "follower"])
 
-    def test_sqlite_checkpoint_resumes_after_graph_is_rebuilt(self) -> None:
+    async def test_sqlite_checkpoint_resumes_after_graph_is_rebuilt(self) -> None:
         model = ScriptedModel()
         tools = ScriptedTools([
             {"screen_type": "PLAY", "summary": "safe"},
@@ -368,20 +511,23 @@ class GoalGraphTests(unittest.TestCase):
         config = {"configurable": {"thread_id": "sqlite-resume"}, "recursion_limit": 30}
         with tempfile.TemporaryDirectory() as root:
             database = str(Path(root, "goals.sqlite3"))
-            with SqliteSaver.from_conn_string(database) as checkpointer:
+            runtime = agent_subgraphs.AgentRuntime(codex=model, tools=tools)
+            async with AsyncSqliteSaver.from_conn_string(database) as checkpointer:
                 first_graph = goal_graph.build_goal_graph(
-                    model, tools, checkpointer, pause_after_observe=True
+                    checkpointer, pause_after_observe=True
                 )
-                paused = first_graph.invoke(
-                    goal_graph.initial_state("finish", retries=0), config
+                paused = await first_graph.ainvoke(
+                    goal_graph.initial_state("finish", retries=0),
+                    config,
+                    context=runtime,
                 )
                 self.assertEqual(paused["phase"], "observed")
 
-            with SqliteSaver.from_conn_string(database) as checkpointer:
+            async with AsyncSqliteSaver.from_conn_string(database) as checkpointer:
                 rebuilt_graph = goal_graph.build_goal_graph(
-                    model, tools, checkpointer, pause_after_observe=True
+                    checkpointer, pause_after_observe=True
                 )
-                resumed = rebuilt_graph.invoke(None, config)
+                resumed = await rebuilt_graph.ainvoke(None, config, context=runtime)
 
         self.assertEqual(resumed["phase"], "observed")
         self.assertEqual(tools.calls.count("prepare"), 1)

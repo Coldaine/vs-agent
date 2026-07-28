@@ -10,12 +10,23 @@ menu action at a time. OCR hints in the observation are never transition gates.
 
 from __future__ import annotations
 
-import json
 import time
-from pathlib import Path
-from typing import Any, Literal, Protocol, TypedDict
+from typing import Any, Literal, TypedDict
 
 from langgraph.graph import END, START, StateGraph
+from langgraph.runtime import Runtime
+
+from agent_subgraphs import (
+    FOLLOWER_SCHEMA,
+    LEADER_SCHEMA,
+    MENU_LEADER_SCHEMA,
+    AgentModelRuntime,
+    AgentRuntime,
+    GameTools,
+    build_follower_subgraph,
+    build_leader_subgraph,
+    checkpoint_thread_bindings,
+)
 
 
 GoalStatus = Literal["running", "achieved", "not_met", "blocked"]
@@ -45,88 +56,8 @@ class GoalState(TypedDict):
     menu_steps_left: int
     eval_contract: dict[str, Any]
     entry_only: bool
-
-
-class ModelRunner(Protocol):
-    def invoke(
-        self,
-        role: str,
-        prompt: str,
-        schema: dict,
-        image_path=None,
-    ) -> dict: ...
-
-
-class GameTools(Protocol):
-    def prepare(self) -> dict: ...
-    def observe(self) -> dict: ...
-    def menu_action(self, action: str, click=None) -> dict: ...
-    def mark_in_game(self) -> None: ...
-    def submit_direction(self, direction: str, latency_ms: float) -> bool: ...
-    def control_window(self, seconds: float) -> dict: ...
-    def select_level_up(self, option: int) -> dict: ...
-    def evaluate(self, goal: str, run_id: str) -> dict: ...
-    def evaluate_entry(self, run_id: str) -> dict: ...
-    def neutralize(self) -> None: ...
-
-
-LEADER_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "intent": {"type": "string"},
-        "option": {"type": ["integer", "null"], "minimum": 1},
-        "reason": {"type": "string"},
-    },
-    "required": ["intent", "option", "reason"],
-    "additionalProperties": False,
-}
-
-MENU_LEADER_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "screen": {
-            "type": "string",
-            "enum": [
-                "WARNING",
-                "TITLE",
-                "MAIN_MENU",
-                "CHARACTER_SELECT",
-                "STAGE_SELECT",
-                "IN_GAME",
-                "LEVEL_UP",
-                "UNKNOWN",
-            ],
-        },
-        "action": {
-            "type": "string",
-            "enum": ["up", "down", "left", "right", "confirm", "esc", "start", "click", "wait"],
-        },
-        "click": {
-            "type": ["array", "null"],
-            "items": {"type": "integer"},
-            "minItems": 2,
-            "maxItems": 2,
-        },
-        "ready_for_run": {"type": "boolean"},
-        "reason": {"type": "string"},
-    },
-    "required": ["screen", "action", "click", "ready_for_run", "reason"],
-    "additionalProperties": False,
-}
-
-FOLLOWER_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "direction": {
-            "type": "string",
-            "enum": ["N", "NE", "E", "SE", "S", "SW", "W", "NW", "HOLD"],
-        },
-        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
-        "reason": {"type": "string"},
-    },
-    "required": ["direction", "confidence", "reason"],
-    "additionalProperties": False,
-}
+    leader_codex_thread_id: str | None
+    follower_codex_thread_id: str | None
 
 
 def initial_state(goal: str, *, retries: int = 0) -> GoalState:
@@ -148,20 +79,39 @@ def initial_state(goal: str, *, retries: int = 0) -> GoalState:
         "menu_steps_left": 40,
         "eval_contract": {},
         "entry_only": False,
+        "leader_codex_thread_id": None,
+        "follower_codex_thread_id": None,
     }
 
 
 def build_goal_graph(
-    model_runner: ModelRunner,
-    tools: GameTools,
     checkpointer,
     *,
     pause_after_observe: bool = False,
+    pause_after_leader: bool = False,
     clock=time.monotonic,
 ):
-    """Compile the goal graph with an injected model and game boundary."""
+    """Compile the parent graph; dependencies arrive only through context."""
 
-    def prepare(state: GoalState) -> dict:
+    leader_subgraph = build_leader_subgraph()
+    follower_subgraph = build_follower_subgraph()
+
+    def _runtime_tools(runtime: Runtime[AgentRuntime]) -> GameTools:
+        return runtime.context.tools
+
+    def _assert_runtime_bindings(
+        state: GoalState,
+        runtime: Runtime[AgentRuntime],
+    ) -> None:
+        expected = checkpoint_thread_bindings(state)
+        actual = runtime.context.codex.thread_bindings
+        if actual != expected:
+            raise RuntimeError(
+                "checkpoint and runtime Codex thread bindings do not match exactly"
+            )
+
+    def prepare(state: GoalState, runtime: Runtime[AgentRuntime]) -> dict:
+        tools = _runtime_tools(runtime)
         prepared = tools.prepare()
         if not prepared.get("verified"):
             tools.neutralize()
@@ -184,8 +134,8 @@ def build_goal_graph(
     def route_after_prepare(state: GoalState) -> str:
         return "blocked" if state["status"] == "blocked" else "observe"
 
-    def observe(state: GoalState) -> dict:
-        return {"phase": "observed", "observation": tools.observe()}
+    def observe(state: GoalState, runtime: Runtime[AgentRuntime]) -> dict:
+        return {"phase": "observed", "observation": _runtime_tools(runtime).observe()}
 
     def route_observation(state: GoalState) -> str:
         screen_type = str((state["observation"] or {}).get("screen_type", "UNKNOWN"))
@@ -201,18 +151,11 @@ def build_goal_graph(
             return "menu_leader"
         return "menu_leader"
 
-    def _contract_blurb(state: GoalState) -> str:
-        contract = state.get("eval_contract") or {}
-        modifiers = contract.get("modifiers") or {}
-        return (
-            f"Fixed eval contract: character={contract.get('character', 'Antonio')}, "
-            f"stage={contract.get('stage', 'Mad Forest')}, "
-            f"modifiers={json.dumps(modifiers, sort_keys=True)}. "
-            "Enforce this contract before starting a run. "
-            "OCR hints in the observation are unreliable; trust the screenshot."
-        )
-
-    def menu_leader(state: GoalState) -> dict:
+    async def menu_leader(
+        state: GoalState,
+        runtime: Runtime[AgentRuntime],
+    ) -> dict:
+        tools = _runtime_tools(runtime)
         if state["menu_steps_left"] <= 0:
             tools.neutralize()
             return {
@@ -227,27 +170,27 @@ def build_goal_graph(
                     "reason": "budget exhausted",
                 },
             }
-        observation = state["observation"] or {}
-        prompt = (
-            f"Goal: {state['goal']}\n"
-            f"{_contract_blurb(state)}\n"
-            f"Menu steps remaining: {state['menu_steps_left']}\n"
-            f"Observation (hints are non-authoritative): "
-            f"{json.dumps(observation, sort_keys=True)}\n"
-            "You are navigating pre-run menus from the screenshot. "
-            "Return exactly one action. Prefer keyboard actions "
-            "(up/down/left/right/confirm/esc/start). Use click with frame "
-            "[x,y] only when a key clearly cannot select the target. "
-            "Set ready_for_run true only when the screenshot already shows "
-            "an in-game HUD or level-up overlay after Antonio + Mad Forest "
-            "with the required modifiers."
-        )
-        image_value = observation.get("image_path")
-        image_path = Path(image_value) if image_value else None
-        decision = model_runner.invoke(
-            "leader", prompt, MENU_LEADER_SCHEMA, image_path=image_path
-        )
-        return {"phase": "menu_planned", "leader_decision": decision}
+        _assert_runtime_bindings(state, runtime)
+        try:
+            result = await leader_subgraph.ainvoke(
+                {
+                    "leader_goal": state["goal"],
+                    "leader_observation": state["observation"] or {},
+                    "leader_eval_contract": state.get("eval_contract") or {},
+                    "leader_decision_kind": "menu",
+                    "leader_menu_steps_left": state["menu_steps_left"],
+                    "leader_thread_id": state.get("leader_codex_thread_id"),
+                },
+                context=AgentModelRuntime(codex=runtime.context.codex),
+            )
+        except Exception:
+            tools.neutralize()
+            raise
+        return {
+            "phase": "menu_planned",
+            "leader_decision": result["leader_decision"],
+            "leader_codex_thread_id": result["leader_thread_id"],
+        }
 
     def route_menu_leader(state: GoalState) -> str:
         if state["status"] == "blocked":
@@ -261,10 +204,10 @@ def build_goal_graph(
             return "promote_in_game"
         return "menu_action"
 
-    def promote_in_game(state: GoalState) -> dict:
+    def promote_in_game(state: GoalState, runtime: Runtime[AgentRuntime]) -> dict:
         decision = state["leader_decision"] or {}
         claimed = str(decision.get("screen") or "IN_GAME")
-        tools.mark_in_game()
+        _runtime_tools(runtime).mark_in_game()
         observation = dict(state["observation"] or {})
         observation["screen_type"] = "LEVEL_UP" if claimed == "LEVEL_UP" else "PLAY"
         observation["promoted_by_vision"] = True
@@ -277,7 +220,8 @@ def build_goal_graph(
     def route_promote(state: GoalState) -> str:
         return "evaluate_entry" if state.get("entry_only") else "leader"
 
-    def evaluate_entry(state: GoalState) -> dict:
+    def evaluate_entry(state: GoalState, runtime: Runtime[AgentRuntime]) -> dict:
+        tools = _runtime_tools(runtime)
         result = tools.evaluate_entry(str(state["run_id"]))
         tools.neutralize()
         return {
@@ -287,7 +231,8 @@ def build_goal_graph(
             "evidence": [*state["evidence"], *result.get("evidence", [])],
         }
 
-    def menu_action(state: GoalState) -> dict:
+    def menu_action(state: GoalState, runtime: Runtime[AgentRuntime]) -> dict:
+        tools = _runtime_tools(runtime)
         decision = state["leader_decision"] or {}
         action = str(decision.get("action") or "wait")
         click = decision.get("click")
@@ -317,43 +262,63 @@ def build_goal_graph(
     def route_menu_action(state: GoalState) -> str:
         return "blocked_end" if state["status"] == "blocked" else "observe"
 
-    def leader(state: GoalState) -> dict:
-        observation = state["observation"] or {}
-        prompt = (
-            f"Goal: {state['goal']}\n"
-            f"{_contract_blurb(state)}\n"
-            f"Observation: {json.dumps(observation, sort_keys=True)}\n"
-            "Return the high-level intent. On LEVEL_UP, option must be the "
-            "one-based option index. Otherwise option must be null."
-        )
-        image_value = observation.get("image_path")
-        image_path = Path(image_value) if image_value else None
-        decision = model_runner.invoke(
-            "leader", prompt, LEADER_SCHEMA, image_path=image_path
-        )
-        return {"phase": "planned", "leader_decision": decision}
+    async def leader(state: GoalState, runtime: Runtime[AgentRuntime]) -> dict:
+        _assert_runtime_bindings(state, runtime)
+        tools = _runtime_tools(runtime)
+        try:
+            result = await leader_subgraph.ainvoke(
+                {
+                    "leader_goal": state["goal"],
+                    "leader_observation": state["observation"] or {},
+                    "leader_eval_contract": state.get("eval_contract") or {},
+                    "leader_decision_kind": "gameplay",
+                    "leader_menu_steps_left": None,
+                    "leader_thread_id": state.get("leader_codex_thread_id"),
+                },
+                context=AgentModelRuntime(codex=runtime.context.codex),
+            )
+        except Exception:
+            tools.neutralize()
+            raise
+        return {
+            "phase": "planned",
+            "leader_decision": result["leader_decision"],
+            "leader_codex_thread_id": result["leader_thread_id"],
+        }
 
     def route_leader(state: GoalState) -> str:
         screen_type = str((state["observation"] or {}).get("screen_type"))
         return "select_level_up" if screen_type == "LEVEL_UP" else "follower"
 
-    def follower(state: GoalState) -> dict:
-        prompt = (
-            f"Goal: {state['goal']}\n"
-            f"Leader intent: {json.dumps(state['leader_decision'], sort_keys=True)}\n"
-            f"Observation: {json.dumps(state['observation'], sort_keys=True)}\n"
-            "Return one movement proposal. The deterministic controller may veto it."
-        )
-        image_value = (state["observation"] or {}).get("image_path")
-        image_path = Path(image_value) if image_value else None
+    async def follower(state: GoalState, runtime: Runtime[AgentRuntime]) -> dict:
+        _assert_runtime_bindings(state, runtime)
+        tools = _runtime_tools(runtime)
         started = clock()
-        proposal = model_runner.invoke(
-            "follower", prompt, FOLLOWER_SCHEMA, image_path=image_path
-        )
-        proposal = {**proposal, "latency_ms": (clock() - started) * 1000.0}
-        return {"phase": "proposed", "follower_proposal": proposal}
+        try:
+            result = await follower_subgraph.ainvoke(
+                {
+                    "follower_goal": state["goal"],
+                    "follower_observation": state["observation"] or {},
+                    "follower_leader_decision": state["leader_decision"] or {},
+                    "follower_thread_id": state.get("follower_codex_thread_id"),
+                },
+                context=AgentModelRuntime(codex=runtime.context.codex),
+            )
+        except Exception:
+            tools.neutralize()
+            raise
+        proposal = {
+            **result["follower_proposal"],
+            "latency_ms": (clock() - started) * 1000.0,
+        }
+        return {
+            "phase": "proposed",
+            "follower_proposal": proposal,
+            "follower_codex_thread_id": result["follower_thread_id"],
+        }
 
-    def control(state: GoalState) -> dict:
+    def control(state: GoalState, runtime: Runtime[AgentRuntime]) -> dict:
+        tools = _runtime_tools(runtime)
         direction = str((state["follower_proposal"] or {}).get("direction", ""))
         latency_ms = float((state["follower_proposal"] or {}).get("latency_ms", 0.0))
         if not tools.submit_direction(direction, latency_ms):
@@ -378,7 +343,8 @@ def build_goal_graph(
     def route_control(state: GoalState) -> str:
         return "blocked_end" if state["status"] == "blocked" else "observe"
 
-    def select_level_up(state: GoalState) -> dict:
+    def select_level_up(state: GoalState, runtime: Runtime[AgentRuntime]) -> dict:
+        tools = _runtime_tools(runtime)
         option = (state["leader_decision"] or {}).get("option")
         if not isinstance(option, int) or option < 1:
             tools.neutralize()
@@ -396,7 +362,8 @@ def build_goal_graph(
     def route_level_up(state: GoalState) -> str:
         return "blocked_end" if state["status"] == "blocked" else "observe"
 
-    def evaluate(state: GoalState) -> dict:
+    def evaluate(state: GoalState, runtime: Runtime[AgentRuntime]) -> dict:
+        tools = _runtime_tools(runtime)
         result = tools.evaluate(state["goal"], str(state["run_id"]))
         tools.neutralize()
         status = str(result.get("status", "not_met"))
@@ -418,9 +385,9 @@ def build_goal_graph(
     def route_evaluation(state: GoalState) -> str:
         return "prepare" if state["phase"] == "retry" else "end"
 
-    def blocked(state: GoalState) -> dict:
+    def blocked(state: GoalState, runtime: Runtime[AgentRuntime]) -> dict:
         observation = state["observation"] or {}
-        tools.neutralize()
+        _runtime_tools(runtime).neutralize()
         reason = state.get("reason") or observation.get(
             "summary", "unknown or unsafe screen state"
         )
@@ -430,7 +397,7 @@ def build_goal_graph(
             "reason": str(reason),
         }
 
-    graph = StateGraph(GoalState)
+    graph = StateGraph(GoalState, context_schema=AgentRuntime)
     graph.add_node("prepare", prepare)
     graph.add_node("observe", observe)
     graph.add_node("menu_leader", menu_leader)
@@ -498,11 +465,22 @@ def build_goal_graph(
     )
     graph.add_edge("blocked", END)
 
-    interrupt_after = ["observe"] if pause_after_observe else None
+    interrupt_after = []
+    if pause_after_observe:
+        interrupt_after.append("observe")
+    if pause_after_leader:
+        interrupt_after.append("leader")
     return graph.compile(checkpointer=checkpointer, interrupt_after=interrupt_after)
 
 
-def run_goal(graph, goal: str, thread_id: str, *, retries: int = 0) -> GoalState:
+async def run_goal(
+    graph,
+    goal: str,
+    thread_id: str,
+    runtime: AgentRuntime,
+    *,
+    retries: int = 0,
+) -> GoalState:
     """Run or resume a goal under one durable LangGraph thread ID."""
 
     config = {
@@ -511,5 +489,7 @@ def run_goal(graph, goal: str, thread_id: str, *, retries: int = 0) -> GoalState
     }
     snapshot = graph.get_state(config)
     if snapshot.values:
-        return graph.invoke(None, config)
-    return graph.invoke(initial_state(goal, retries=retries), config)
+        return await graph.ainvoke(None, config, context=runtime)
+    return await graph.ainvoke(
+        initial_state(goal, retries=retries), config, context=runtime
+    )
