@@ -52,11 +52,11 @@
 - Produces: `GoalState`, `GoalStatus`, `build_goal_graph(model_runner, tools, checkpointer)`, and `run_goal(goal, thread_id, config) -> GoalStatus`.
 - Consumes: `CodexOAuthRunner.invoke()` and a typed `GameTools` protocol.
 
-- [ ] **Step 1: Write failing tests** for `prepare -> verify -> lead -> follow -> observe -> evaluate`, `LEVEL_UP` routing, safety-fault neutralization, retry budget exhaustion, achieved termination, and checkpoint resume by `thread_id`.
-- [ ] **Step 2: Run** `.venv\Scripts\python.exe -m unittest discover -s tests -p "test_goal_graph.py" -v` and verify failures are caused by the missing graph module.
-- [ ] **Step 3: Implement** small graph nodes that exchange structured state only. The leader returns `{phase, intent, reason}`; the follower returns `{direction, confidence, reason}`; deterministic tool results decide transitions.
-- [ ] **Step 4: Run focused graph tests**, then all unit tests.
-- [ ] **Step 5: Commit** with `git commit -m "feat: add durable LangGraph goal runtime"`.
+- [x] **Step 1: Write failing tests** for `prepare -> verify -> lead -> follow -> observe -> evaluate`, `LEVEL_UP` routing, safety-fault neutralization, retry budget exhaustion, achieved termination, and checkpoint resume by `thread_id`.
+- [x] **Step 2: Run** `.venv\Scripts\python.exe -m unittest discover -s tests -p "test_goal_graph.py" -v` and verify failures are caused by the missing graph module.
+- [x] **Step 3: Implement** small graph nodes that exchange structured state only. The leader returns `{phase, intent, reason}`; the follower returns `{direction, confidence, reason}`; deterministic tool results decide transitions.
+- [x] **Step 4: Run focused graph tests**, then all unit tests.
+- [x] **Step 5: Commit** with `git commit -m "feat: add durable LangGraph goal runtime"`.
 
 ### Task 3: Bound existing game capabilities behind typed tools
 
