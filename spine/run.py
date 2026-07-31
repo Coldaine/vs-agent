@@ -83,16 +83,18 @@ async def run_langgraph_goal(
     """Run one goal under one checkpoint-bound Codex SDK lifecycle."""
 
     cfg = yaml.safe_load(Path(config_path).read_text(encoding="utf-8"))
-    io = IOAdapter(backend=os.environ.get("VS_IO_BACKEND", "auto"), config=cfg)
-    controller = Controller(io, cfg)
-    tools = SpineGameTools(
-        cfg, io, controller, attach=attach, entry_only=entry_only
-    )
     checkpoint = Path(checkpoint_path)
     checkpoint.parent.mkdir(parents=True, exist_ok=True)
+    io = None
+    tools = None
     runtime = None
 
     try:
+        io = IOAdapter(backend=os.environ.get("VS_IO_BACKEND", "auto"), config=cfg)
+        controller = Controller(io, cfg)
+        tools = SpineGameTools(
+            cfg, io, controller, attach=attach, entry_only=entry_only
+        )
         async with AsyncSqliteSaver.from_conn_string(str(checkpoint)) as checkpointer:
             graph = build_goal_graph(checkpointer)
             config = {
@@ -100,6 +102,10 @@ async def run_langgraph_goal(
                 "recursion_limit": 1000,
             }
             snapshot = await graph.aget_state(config)
+            if snapshot.values:
+                restore = getattr(tools, "restore_checkpoint", None)
+                if restore is not None:
+                    restore(dict(snapshot.values))
             runtime = AgentRuntime.from_checkpoint(
                 snapshot.values or {},
                 tools,
@@ -114,14 +120,16 @@ async def run_langgraph_goal(
                 retries=retries,
             )
     finally:
-        try:
+        if tools is not None:
             tools.neutralize()
+        try:
+            if runtime is not None:
+                await runtime.codex.close()
         finally:
-            try:
-                if runtime is not None:
-                    await runtime.codex.close()
-            finally:
+            if tools is not None:
                 tools.close()
+            elif io is not None:
+                io.close()
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -87,6 +87,10 @@ class RecordingTools:
     def close(self):
         self.events.append("close-tools")
 
+    def restore_checkpoint(self, state):
+        self.events.append("restore-checkpoint")
+        return True
+
 
 class FailingCodexClient(RecordingCodexClient):
     async def invoke(self, role, prompt, schema, image_path=None, thread_id=None):
@@ -215,6 +219,7 @@ class GoalResumeAndFailureTests(unittest.IsolatedAsyncioTestCase):
             resumed_client.thread_bindings,
             {"leader": "leader-sdk-thread", "follower": "follower-sdk-thread"},
         )
+        self.assertIn("restore-checkpoint", second_tools.events)
 
     async def test_model_failure_still_neutralizes_tools_and_closes_sdk(self) -> None:
         tools = RecordingTools()

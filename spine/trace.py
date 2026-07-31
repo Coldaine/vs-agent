@@ -12,6 +12,7 @@ class EpisodeWriter:
         self._states = open(os.path.join(self.dir, "states.jsonl"), "a")
         self._planner = open(os.path.join(self.dir, "planner.jsonl"), "a")
         self.t0 = time.monotonic()
+        self._closed = False
 
     def t(self) -> float:
         return time.monotonic() - self.t0
@@ -40,17 +41,51 @@ class EpisodeWriter:
             f.write(image_bytes)
 
     def close(self, survived_s, level, kills, invalid, prompt_hashes: dict):
+        if self._closed:
+            return
+        self._write_outcome(survived_s, level, kills, invalid, prompt_hashes)
+        self._close_streams()
+
+    def abort(self, reason: str) -> None:
+        """Close an interrupted run while preserving an invalid terminal record."""
+        if self._closed:
+            return
+        self._write_outcome(
+            survived_s=round(self.t(), 1),
+            level=None,
+            kills=None,
+            invalid=True,
+            prompt_hashes={},
+            abort_reason=str(reason),
+        )
+        self._close_streams()
+
+    def _write_outcome(
+        self,
+        survived_s,
+        level,
+        kills,
+        invalid,
+        prompt_hashes: dict,
+        abort_reason: str | None = None,
+    ) -> None:
         with open(os.path.join(self.dir, "outcome.json"), "w") as f:
-            json.dump({
+            outcome = {
                 "survived_s": survived_s, "level": level, "kills": kills,
                 "cause_of_death": None,      # filled by review, not runtime
                 "invalid": invalid,
-                "prompt_hashes": prompt_hashes}, f, indent=2)
+                "prompt_hashes": prompt_hashes,
+            }
+            if abort_reason is not None:
+                outcome["abort_reason"] = abort_reason
+            json.dump(outcome, f, indent=2)
+
+    def _close_streams(self) -> None:
         self._states.close()
         self._planner.close()
+        self._closed = True
 
 
 def hash_prompt(path: str) -> str:
     with open(path, "rb") as f:
         return hashlib.sha256(f.read()).hexdigest()[:12]
-

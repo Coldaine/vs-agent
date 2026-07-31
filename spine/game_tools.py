@@ -159,6 +159,39 @@ class SpineGameTools:
             "hints_are_non_authoritative": True,
         }
 
+    def checkpoint_state(self) -> dict:
+        return {
+            "run_id": self.run_id,
+            "started_at": self.started_at,
+            "in_game": self.in_game,
+            "observation_index": self._observation_index,
+            "last_options": list(self.last_options),
+        }
+
+    def restore_checkpoint(self, state: dict) -> bool:
+        """Reopen append-only evidence for a paused, still-active graph run."""
+        if self.writer is not None or self.run_id is not None:
+            raise RuntimeError("cannot restore checkpoint into an active game tools instance")
+        if state.get("phase") in {"begin", "blocked", "achieved", "not_met"}:
+            return False
+        tool_state = state.get("tool_state") or {}
+        run_id = tool_state.get("run_id") or state.get("run_id")
+        if not isinstance(run_id, str) or not run_id.strip():
+            return False
+        self.neutralize()
+        self.run_id = run_id
+        self.writer = self.writer_factory(self.cfg["episodes_dir"], run_id)
+        self.started_at = tool_state.get("started_at")
+        self.in_game = bool(tool_state.get("in_game", False))
+        self._observation_index = int(tool_state.get("observation_index", 0))
+        self.last_options = list(
+            tool_state.get("last_options")
+            or (state.get("observation") or {}).get("options")
+            or []
+        )
+        self._closed = False
+        return True
+
     def menu_action(
         self,
         action: str,
@@ -333,7 +366,12 @@ class SpineGameTools:
 
     def close(self) -> None:
         self.neutralize()
-        self.io.close()
+        try:
+            if self.writer is not None and not self._closed:
+                self.writer.abort("runtime closed before deterministic evaluation")
+                self._closed = True
+        finally:
+            self.io.close()
 
     def _enter_game(self) -> None:
         if not self.in_game:

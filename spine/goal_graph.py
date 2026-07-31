@@ -56,6 +56,7 @@ class GoalState(TypedDict):
     menu_steps_left: int
     eval_contract: dict[str, Any]
     entry_only: bool
+    tool_state: dict[str, Any]
     leader_codex_thread_id: str | None
     follower_codex_thread_id: str | None
 
@@ -79,6 +80,7 @@ def initial_state(goal: str, *, retries: int = 0) -> GoalState:
         "menu_steps_left": 40,
         "eval_contract": {},
         "entry_only": False,
+        "tool_state": {},
         "leader_codex_thread_id": None,
         "follower_codex_thread_id": None,
     }
@@ -98,6 +100,10 @@ def build_goal_graph(
 
     def _runtime_tools(runtime: Runtime[AgentRuntime]) -> GameTools:
         return runtime.context.tools
+
+    def _tool_state(tools: GameTools) -> dict[str, Any]:
+        checkpoint_state = getattr(tools, "checkpoint_state", None)
+        return dict(checkpoint_state() if checkpoint_state is not None else {})
 
     def _assert_runtime_bindings(
         state: GoalState,
@@ -133,13 +139,19 @@ def build_goal_graph(
             "menu_steps_left": int(prepared.get("menu_steps_budget", 40)),
             "eval_contract": dict(prepared.get("eval_contract") or {}),
             "entry_only": bool(prepared.get("entry_only", False)),
+            "tool_state": _tool_state(tools),
         }
 
     def route_after_prepare(state: GoalState) -> str:
         return "blocked" if state["status"] == "blocked" else "observe"
 
     def observe(state: GoalState, runtime: Runtime[AgentRuntime]) -> dict:
-        return {"phase": "observed", "observation": _runtime_tools(runtime).observe()}
+        tools = _runtime_tools(runtime)
+        return {
+            "phase": "observed",
+            "observation": tools.observe(),
+            "tool_state": _tool_state(tools),
+        }
 
     def route_observation(state: GoalState) -> str:
         screen_type = str((state["observation"] or {}).get("screen_type", "UNKNOWN"))
@@ -219,6 +231,7 @@ def build_goal_graph(
             "phase": "in_game",
             "observation": observation,
             "evidence": [*state["evidence"], f"vision-promote:{claimed}"],
+            "tool_state": _tool_state(_runtime_tools(runtime)),
         }
 
     def route_promote(state: GoalState) -> str:

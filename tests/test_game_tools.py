@@ -141,7 +141,7 @@ class FakeLaunch:
 class FakeWriter:
     def __init__(self, root: str, run_id: str) -> None:
         self.dir = str(Path(root) / run_id)
-        Path(self.dir, "keyframes").mkdir(parents=True)
+        Path(self.dir, "keyframes").mkdir(parents=True, exist_ok=True)
         self.ticks: list[tuple] = []
         self.closed: dict | None = None
 
@@ -159,6 +159,9 @@ class FakeWriter:
 
     def close(self, **kwargs) -> None:
         self.closed = kwargs
+
+    def abort(self, reason: str) -> None:
+        self.closed = {"invalid": True, "abort_reason": reason}
 
 
 def fixed_config(root: str) -> dict:
@@ -342,6 +345,32 @@ class SpineGameToolsTests(unittest.TestCase):
 
             self.assertEqual(launch.calls, ["launch_game"])
             self.assertGreaterEqual(controller.neutralized, 1)
+
+    def test_checkpoint_restore_reopens_writer_and_preserves_options(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            tools, _, _, _ = self.make_tools(root)
+            prepared = tools.prepare()
+            tools.observe()
+            checkpoint = {
+                "phase": "observed",
+                "run_id": prepared["run_id"],
+                "observation": {"options": ["A", "B", "C"]},
+                "tool_state": {
+                    "run_id": prepared["run_id"],
+                    "started_at": 12.5,
+                    "in_game": True,
+                    "observation_index": 1,
+                    "last_options": ["A", "B", "C"],
+                },
+            }
+            tools.close()
+
+            restored, _, _, _ = self.make_tools(root)
+            self.assertTrue(restored.restore_checkpoint(checkpoint))
+            self.assertEqual(restored.run_id, prepared["run_id"])
+            self.assertEqual(restored.last_options, ["A", "B", "C"])
+            self.assertEqual(restored.started_at, 12.5)
+            restored.close()
 
     def test_model_proposal_reaches_controller_but_never_io_directly(self) -> None:
         with tempfile.TemporaryDirectory() as root:
