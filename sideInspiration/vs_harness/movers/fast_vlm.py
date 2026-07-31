@@ -100,7 +100,7 @@ class FastVLMMover(Mover):
         prompt = (
             "You are the movement controller for Vampire Survivors. "
             "Weapons fire automatically; you only choose movement. "
-            f"Leader intent: {json.dumps(intent.to_dict())}. "
+            f"planner intent: {json.dumps(intent.to_dict())}. "
             'Reply with ONLY JSON: {"move":"N|NE|E|SE|S|SW|W|NW|HOLD"}.'
         )
         payload = {
@@ -135,3 +135,4 @@ class FastVLMMover(Mover):
                 text = text[4:].strip()
         parsed = json.loads(text)
         return str(parsed.get("move", "HOLD"))
+

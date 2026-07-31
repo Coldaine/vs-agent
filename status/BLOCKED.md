@@ -1,5 +1,5 @@
-# BLOCKED — deterministic menu navigation failed
+# CLEARED — vision-led menu entry is the active G0 path
 
-Unable to reach Mad Forest: expected one of ['STAGE_SELECT'], got CHARACTER_SELECT: 'ROCKSTAR FAVOURITE MAX WEAPONS POWER CREEP GOLDEN EGGS EGGS: 20 SKIN (I ENTER CO-OP | FILTER: OFF GENNARO BELPAESE FAVOURITE = A MAX WEAPONS [6] POWER CREEP EE. GOLDEN EGGS EO” EGG'
-
-Evidence frame: `status/stuck.png`. Do not send further menu input until this state is reviewed.
+OCR menu macros are no longer the navigator. Transient failures during
+plumbing checks must not block vision entry attempts unless a real input or
+capture fault remains after review.

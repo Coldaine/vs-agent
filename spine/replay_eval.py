@@ -67,3 +67,4 @@ if __name__ == "__main__":
     args = ap.parse_args()
     res = score_prompt(args.prompt)
     print(json.dumps({k: v for k, v in res.items() if k != "rows"}, indent=2))
+

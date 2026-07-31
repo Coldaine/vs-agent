@@ -17,7 +17,7 @@ episodes/run_<n>/
       "follower_latency_ms": 412,
       "action": "SE"
     }
-  leader.jsonl       one line per level-up:
+  planner.jsonl       legacy filename; one leader decision per level-up:
     {"t": 95.0, "options": [...], "pick": "...", "why": "...",
      "brief_update": "..."}
   keyframes/         run start, each level-up, t-60s before death,
@@ -79,3 +79,4 @@ Status changes are APPENDED as new lines, never edited in place:
   (frame, state, correct_action).
 - Keep them in separate files: corpus/positive.jsonl,
   corpus/corrective.jsonl. Never mix without labels.
+

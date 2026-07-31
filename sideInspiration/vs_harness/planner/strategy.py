@@ -7,25 +7,25 @@ from typing import Any
 
 import numpy as np
 
-from vs_harness.leader.knowledge import format_knowledge_for_prompt, load_knowledge
+from vs_harness.planner.knowledge import format_knowledge_for_prompt, load_knowledge
 from vs_harness.types import IntentPacket, ScreenMode
 
 
-class StrategyLeader:
-    """Event-driven strategy leader (OpenAI-compatible) + offline heuristics."""
+class StrategyPlanner:
+    """Event-driven strategy planner (OpenAI-compatible) + offline heuristics."""
 
     def __init__(self, cfg: dict[str, Any]):
         self.cfg = cfg
-        leader = cfg.get("leader", {})
+        planner = cfg.get("planner", {})
         openai = cfg.get("openai", {})
-        self.enabled = bool(leader.get("enabled", True))
-        self.refresh_s = float(leader.get("intent_refresh_s", 15.0))
+        self.enabled = bool(planner.get("enabled", True))
+        self.refresh_s = float(planner.get("intent_refresh_s", 15.0))
         self.base_url = str(openai.get("base_url", "https://api.openai.com/v1")).rstrip("/")
         self.model = str(openai.get("leader_model", "gpt-4o"))
         key_env = openai.get("api_key_env", "VS_OPENAI_API_KEY")
         self.api_key = os.environ.get(key_env)
         self.timeout_s = float(openai.get("timeout_s", 30.0))
-        self.knowledge = load_knowledge(leader.get("knowledge_pack", "configs/evolution_knowledge.yaml"))
+        self.knowledge = load_knowledge(planner.get("knowledge_pack", "configs/evolution_knowledge.yaml"))
         self.intent = IntentPacket(
             mode="kite",
             attractors=["open_space"],
@@ -117,7 +117,7 @@ class StrategyLeader:
                 {
                     "role": "system",
                     "content": (
-                        "You are the strategy leader for a Vampire Survivors agent. "
+                        "You are the strategy planner for a Vampire Survivors agent. "
                         "Reply ONLY with compact JSON intent."
                     ),
                 },
@@ -146,3 +146,4 @@ class StrategyLeader:
             spatial_bias=str(data.get("spatial_bias", "")),
             notes=str(data.get("notes", "")),
         )
+

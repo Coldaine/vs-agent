@@ -1,6 +1,10 @@
 # spine runtime dependencies
-# Model I/O
-openai>=1.30
+# Model runtime. Models are invoked through ChatGPT Pro OAuth in Codex CLI;
+# these packages provide orchestration/checkpointing only, never authentication.
+langgraph>=1.2.9,<2
+langgraph-checkpoint-sqlite>=3.1.0,<4
+jsonschema>=4.26,<5
+openai-codex==0.144.4
 # Perception
 ultralytics>=8.2        # YOLOv8 detector (forked weights provisioned separately)
 opencv-python>=4.9

@@ -6,7 +6,7 @@ Episode JSONL event types:
   - run_start: {run_id, approach_id, wrapper_enabled, config_snapshot, seed, mode}
   - tick: {t, screen_mode, heading, keys, wrapper_mode, clearance, trapped,
            intent_mode, perception_ms, heading_entropy, masks_rle?}
-  - leader: {t, intent, trigger}
+  - planner: {t, intent, trigger}
   - levelup: {t, options, choice_index}
   - run_end: {t, alive, survive_s, hits, gems, breakout_count, mean_entropy, death_reason}
 
@@ -52,3 +52,4 @@ class RunEndEvent(TypedDict, total=False):
     breakout_count: int
     mean_entropy: float
     death_reason: str
+

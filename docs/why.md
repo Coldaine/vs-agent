@@ -12,8 +12,8 @@ sub-second movement decisions per run, plus a few dozen slow,
 high-leverage build decisions. No single model is good at both, and no
 single latency budget serves both. So:
 
-- FOLLOWER: fast, cheap, narrow (one of 9 movement tokens).
-- LEADER: slower, smarter, rare (level-up picks, strategy briefs).
+- follower: fast, narrow (one of 9 movement tokens).
+- leader: slower, smarter, rare (level-up picks, strategy briefs).
 - BUILDER: never plays at all — maintains the system and the
   experiment loops.
 
@@ -46,8 +46,9 @@ distillation would learn an incoherent mixture.
 
 Three measured problems:
 
-1. **Latency variance, not mean latency, kills you.** API endpoints
-   (and even local servers under load) have p95s 2-5x their mean.
+1. **Latency variance, not mean latency, kills you.** Remote model turns
+   through the ChatGPT OAuth-backed Codex runtime (and even local servers under
+   load) can have p95s 2-5x their mean.
    One slow call while surrounded = death. Hence the reflex floor.
 2. **VLMs are weak on dense, cluttered scenes.** Late-game VS is
    hundreds of sprites plus particle effects. Small detectors (YOLO)
@@ -120,14 +121,15 @@ comparing noise. Fixed stage/character/seeds, 3-5 episodes, median not
 mean. If a change to eval conditions is ever truly needed, all
 champion scores are invalidated and re-baselined — never mixed.
 
-## 10. Why computer-control-mcp instead of custom capture code
+## 10. Why WGC through `io_adapter.py` instead of custom capture code
 
-Screen capture of games fails in a specific way: GPU-accelerated
-windows return black frames via traditional GDI screenshots. The MCP
-server already solves this (WGC capture path) plus input injection,
-OCR, and window management. Writing our own would be re-solving known
-problems for zero differentiation. Our differentiation is the
-controller, the loops, and the corpus — that's where the code goes.
+Screen capture of games fails in a specific way: GPU-accelerated windows
+return black frames via traditional GDI screenshots. `io_adapter.py` uses
+the WGC/DXCam path plus the calibrated input boundary, while launch and
+perception provide bounded menu/OCR helpers. Reusing those boundaries avoids
+re-solving capture and input synchronization in the graph. Our
+differentiation is the controller, the loops, and the corpus — that's where
+the code goes.
 
 ## 11. Why there is an explicit reasoning stage (the THEORIST)
 
@@ -180,3 +182,4 @@ inspection directive with the render and bounding-box JSON; the
 analogous blind-application of model corrections was deliberately
 NOT borrowed — Blender mistakes cost a re-render, VS mistakes cost a
 22-minute episode. Irreversibility is why the controller arbitrates.)
+

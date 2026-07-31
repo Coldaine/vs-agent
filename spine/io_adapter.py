@@ -3,7 +3,7 @@
 Route abstraction per docs/stack.md. Three candidate backends, tried in
 order (A/B/C with one bounded diagnostic cycle each):
   A. NitroGen GamepadEnv (DXcam capture + virtual gamepad + recording)
-  B. computer-control-mcp (WGC screenshot + keyboard)
+  B. WGC/DXCam capture plus the local input backend
   C. thin MCP facade over NitroGen GamepadEnv
 
 The builder implements the chosen backend behind this interface.
@@ -130,6 +130,12 @@ class IOAdapter:
         minimum = config.get("capture_min_dimensions", [640, 480])
         self._min_capture_width, self._min_capture_height = minimum
         self._capture_retries = int(config.get("capture_retries", 3))
+        # Configured backoff gives ~2.5s total window (5 x 0.5s) to absorb
+        # transient WGC black frames during game/menu transitions.  A run
+        # should not fail on a one-off capture glitch.
+        self._capture_retry_delay_s = float(
+            config.get("capture_retry_delay_s", 0.5)
+        )
         self._last_img: Optional[np.ndarray] = None
         self._input_backend = config.get("input_backend", "gamepad")
         self._gamepad = None
@@ -350,7 +356,12 @@ class IOAdapter:
         return img
 
     def screenshot(self) -> Frame:
-        """Return a valid game frame, retrying transient WGC resize glitches."""
+        """Return a valid game frame, retrying transient WGC resize glitches.
+
+        Black frames can occur during game boot, screen transitions, or
+        momentary WGC blips.  The retry window (~2.5s with default config)
+        absorbs these without aborting the run.
+        """
         last_error = "capture returned no frame"
         for attempt in range(1, self._capture_retries + 1):
             try:
@@ -370,7 +381,7 @@ class IOAdapter:
             except BlackFrameError as error:
                 last_error = str(error)
                 if attempt < self._capture_retries:
-                    time.sleep(0.15)
+                    time.sleep(self._capture_retry_delay_s)
 
         raise BlackFrameError(last_error)
 
@@ -437,16 +448,29 @@ class IOAdapter:
         self._keys.click(x, y)
 
     def click_frame(self, x: int, y: int) -> None:
-        """Click frame coordinates relative to the captured game window."""
+        """Click frame coordinates relative to the captured game window.
+
+        Applies the calibrated capture-to-hit-test transform and fails closed
+        when the live capture resolution no longer matches calibration.
+        """
         import ctypes
 
+        from capture_transform import frame_to_hit_test
+
+        frame_size = None
+        frame = self.screenshot()
+        frame_size = (frame.width, frame.height)
+
+        hit_x, hit_y = frame_to_hit_test(
+            x, y, self.config, frame_size=frame_size
+        )
         window = self._game_window()
         if window is not None:
             origin_x, origin_y = window.left, window.top
         else:
             origin_x, origin_y = self.config.get("wgc_monitor_origin", [0, 0])
         user32 = ctypes.windll.user32
-        user32.SetCursorPos(int(origin_x + x), int(origin_y + y))
+        user32.SetCursorPos(int(origin_x + hit_x), int(origin_y + hit_y))
         user32.mouse_event(0x0002, 0, 0, 0, 0)
         user32.mouse_event(0x0004, 0, 0, 0, 0)
 

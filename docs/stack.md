@@ -1,92 +1,57 @@
-# Stack rationale — what exists vs. what the BUILDER writes
+# Current stack
 
-## Off the shelf (do not rebuild)
+| Layer | Implementation | Authority |
+|---|---|---|
+| Goal runtime | LangGraph 1.2.x | phases, routing, checkpoints, resume |
+| Checkpoints | `langgraph-checkpoint-sqlite` | durable local goal state |
+| Authentication | official `openai-codex` SDK + managed `codex app-server` ChatGPT login | auth storage and refresh |
+| Leader model | explicitly configured `gpt-5.6-luna` SDK thread | intent and level-up proposal |
+| Follower model | explicitly configured `gpt-5.6-luna` SDK thread | one movement proposal |
+| Model adapter | `spine/codex_sdk_client.py` | SDK lifecycle, role threads, images, schema validation |
+| Game bridge | `spine/game_tools.py` | bounded operations and evidence |
+| Controller | `spine/controller.py` | sole movement-input writer |
+| Reflex | `spine/reflex.py` plus YOLO detections | deterministic safety veto |
+| Capture/input | `spine/io_adapter.py` | WGC/DXCam and keyboard/gamepad boundary |
+| Perception | `spine/perceive.py` | YOLO/OCR state |
+| Trace | `spine/trace.py` | append-only episode evidence |
 
-1. **computer-control-mcp** — desktop control MCP server: screenshot
-   (with WGC capture path for GPU/game windows — use WGC, plain GDI
-   screenshots return black frames for games), key press/hold/release,
-   OCR, window enumeration. Install: `uvx computer-control-mcp@latest`.
-   This is the entire game I/O layer.
+## Authentication: critically not API
 
-## Launching the game
+The model runtime uses the official SDK's **ChatGPT-managed login, not the
+OpenAI API**. It does not accept an API base URL or provider key and does not
+use OpenRouter or DeepSeek. The SDK/app-server owns authentication state;
+repository code reads only public account metadata and never reads the OAuth
+credential.
 
-- Vampire Survivors Steam app id: **1794680**.
-  Launch: `steam steam://rungameid/1794680` (Steam must be logged in;
-  starts silently, no Steam UI interaction).
-- Windowed mode, fixed resolution, set once at G0 and never changed —
-  template matches and click coordinates are resolution-dependent.
-- Run start is a deterministic menu macro in spine/launch.py: VS menus
-  are fully keyboard-navigable (arrows + Enter). Fixed sequence with an
-  OCR checkpoint after each step (expected screen text), retry once on
-  failure, then escalate. No blind sleeps longer than 5s.
-- First launch only: dismiss Steam dialogs/cloud-sync prompts. If a
-  dialog template is unknown, screenshot it for the trace and add a
-  handler; do not click randomly.
-2. **victorcoelh/vampire-survivors-bot** — plays the Steam version of
-   Vampire Survivors with YOLOv8 enemy/item detection. Fork its
-   detection weights/approach for the reflex layer's threat-by-octant
-   computation. (LonesomeSoul/Vampire_survivors_bot_CV is a CV-based
-   alternative reference.)
-3. **Model endpoints** — OpenRouter's `openrouter/free` router provides
-   the follower and labeler with free image-capable models; direct
-   DeepSeek V4 Flash provides text-only leader/reviewer reasoning. Keys
-   are injected into the process, normally through Doppler; this repo
-   does not pin a Doppler project or config.
+Runtime policy forbids `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, and
+`DEEPSEEK_API_KEY`. Compatibility helpers reject populated values explicitly;
+the direct LangGraph path binds authentication by accepting only public SDK
+account metadata with `type=chatgpt` and `plan_type=pro`.
 
-## Model selection (as of July 2026 — re-verify before G2)
+## Why LangGraph
 
-- BUILDER: whatever the ChatGPT-OAuth Codex subscription serves.
-- LEADER + review/theorist sub-agents: direct `deepseek-v4-flash`, with
-  DeepSeek thinking effort set to `max` by default.
-- FOLLOWER + labeler: `openrouter/free`, which selects a currently-free
-  model compatible with image input. Free availability is transient, so
-  benchmark a paid replacement before relying on it for evals.
-- FOLLOWER local (RTX 5090, 32GB — preferred end state before
-  distillation): trial in this order via vLLM's OpenAI server:
-  Qwen3-VL-4B, Qwen3-VL-8B, Gemma 4 12B, InternVL3.5-8B
-  (InternVL needs --trust-remote-code; cap input ~896px or visual
-  tokens explode). Do not trial below 4B — sub-2B models miss things
-  badly on cluttered screens.
-- DISTILLED END STATE (G7): YOLO-class detector + ~5M-param policy
-  net trained on corpus/. Not a VLM.
+LangGraph supplies durable state transitions, checkpoint/resume, explicit branch routing, bounded retries, and a clean place to separate model decisions from deterministic evidence. It does not replace the controller or turn the LLM into a real-time key loop.
 
-### Model trial method (offline, before G2)
+## Runtime command
 
-1. Use the G1.5 capture (~500 frames) as trial input.
-2. Serve candidates one at a time:
-   `vllm serve <model> --dtype bfloat16 --max-model-len 8192 --port 8000`
-3. Batch-eval each on the same 100 labeled frames: field accuracy,
-   direction-agreement, latency p50/p95 at concurrency 1.
-4. Winner = best accuracy among p95 < 500ms. Runner-up becomes the
-   second-opinion model the controller may consult on disagreement.
-   Log results in docs/analysis/model_trial.md.
+```powershell
+.venv\Scripts\python.exe spine\smoke_oauth_graph.py
+.venv\Scripts\python.exe spine\run.py `
+  --goal "Complete a fixed-condition run and prove survival reached 540 seconds" `
+  --thread-id goal-g4
+```
 
-## What the BUILDER writes (~300 lines target)
+The smoke itself validates public SDK account metadata, exact model-catalog
+availability, both child graphs, distinct role threads, structured decisions,
+and the image attachment. Do not wrap it in Doppler or inject any API key.
 
-- `spine/run.py` — episode loop: launch/focus game window, tick at
-  ~2Hz (MCP screenshot -> reflex layer -> follower call -> MCP key),
-  level-up screen detection (OCR/template) -> leader call -> menu
-  click, death detection, episode writer per docs/trace_spec.md.
-- `spine/reflex.py` — threat vectors from YOLO detections; overrides
-  follower direction when nearest enemy is within collision radius.
-- `spine/review.py` — assembles review packets, spawns fresh-context
-  review sub-agents (autopsy + build audit), writes failures.jsonl.
-- `spine/verify_perception.py` — G2 gate helper.
+## Current model assignment
 
-## The three models (do not confuse roles)
+Both leader and follower role threads explicitly configure `gpt-5.6-luna` on
+start/resume. Public catalog availability is checked separately; the
+SDK `TurnResult` does not echo the model. The follower is intentionally not
+expected to maintain a 2 Hz network/model cadence. It proposes an
+intent/direction, while `SpineGameTools.control_window()` and `Controller`
+handle a bounded deterministic tick window.
 
-- BUILDER (this agent): writes/maintains code and prompts; runs the
-  experiment loop in GOAL.md. Never plays.
-- FOLLOWER: real-time movement, 8-direction + HOLD, ~500ms cadence.
-- LEADER: level-up picks, strategy brief, run strategy. Never steers.
-
-## Known failure modes this design defends against
-
-- Black screenshots on games -> WGC capture path.
-- VLM latency spikes -> reflex override + p95 invalidation rule.
-- Main-context rot from long traces -> review only in sub-agents,
-  JSON-only output.
-- Self-deluded "improvement" -> KEEP/REVERT hill-climb against
-  survived_s only; unanchored self-critique is forbidden.
-- Eval variance -> fixed stage/character, 3-5 runs per experiment,
-  median not mean.
+The eventual optimized follower may be a smaller local or distilled model, but that is not the current runtime and must not be substituted silently.

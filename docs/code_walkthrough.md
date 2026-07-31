@@ -59,7 +59,7 @@ be able to say why its justification no longer holds — otherwise don't.
 
 ## run.py — the episode
 
-- Follower on a daemon THREAD, controller on the main thread: the VLM
+- follower on a daemon THREAD, controller on the main thread: the VLM
   is async by design (controller.md). Daemon so a hung endpoint can't
   block shutdown. The finally block owns neutralize — every exit path,
   including exceptions and KeyboardInterrupt.
@@ -123,9 +123,9 @@ be able to say why its justification no longer holds — otherwise don't.
   sleeps are how menu macros desync overnight; escalating with a
   screenshot (status/stuck.png) turns a stalled night into a 2-minute
   human fix in the morning.
-- Phantom-pick guard in select_option (idx=0 fallback): the leader
-  WILL eventually name an option that doesn't exist; crashing the run
-  over it wastes an episode, taking the first option loses one pick.
+- Level-up bounds are enforced in game_tools before select_option: the
+  leader WILL eventually name an option that doesn't exist; failing closed
+  preserves the episode's safety and evidence boundary.
 
 ## trace.py
 
@@ -135,9 +135,11 @@ be able to say why its justification no longer holds — otherwise don't.
   by the runtime — the runtime doesn't know why it died, and letting
   it guess contaminates the ledger.
 
-## Seams (intentionally NotImplementedError)
+## Runtime seams
 
-io_adapter, model_client, perceive raise instead of returning stubs:
-a stub that returns plausible-looking garbage would let the system
-"run" while producing silently meaningless traces. Failing loud at
-the seam is the entire point of the seam.
+`io_adapter` and `perceive` fail loudly when capture, input, OCR, or weights are
+unavailable. `codex_sdk_client` fails closed unless public SDK metadata reports
+a ChatGPT-managed account; compatibility `model_client` helpers also reject
+inherited model API keys. `game_tools` bounds model proposals through the
+deterministic controller. Plausible-looking fallback data or an API-backed
+provider fallback would silently invalidate traces, so neither is permitted.

@@ -1,5 +1,5 @@
-# Classic leader–follower path from the plan:
-# fast OpenAI-compatible VLM (~2 Hz) + slow strategy leader on pauses.
+# Classic planner–pilot path from the plan:
+# fast OpenAI-compatible VLM (~2 Hz) + slow strategy planner on pauses.
 inherits: configs/default.yaml
 
 loop:
@@ -24,3 +24,4 @@ perception:
 openai:
   follower_model: "${VS_FOLLOWER_MODEL:-gpt-4o-mini}"
   leader_model: "${VS_LEADER_MODEL:-gpt-4o}"
+

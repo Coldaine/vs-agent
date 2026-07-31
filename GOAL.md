@@ -1,8 +1,20 @@
 # GOAL.md — Vampire Survivors self-improving agent
 
-You are the BUILDER. You do not play the game. You maintain a system in
-which two other models play it, and you improve that system through a
-disciplined experiment loop. Everything in this file is binding.
+You are the BUILDER. You maintain a LangGraph system in which a leader and
+follower propose decisions while a deterministic controller owns game input.
+Everything in this file is binding.
+
+## Authentication and framework invariant
+
+The active runtime uses the official `openai-codex` Python SDK and managed
+`codex app-server` with the existing **ChatGPT-managed login**. This is
+critically **not the OpenAI API** and not an OpenAI-compatible HTTP endpoint.
+Do not use or restore `OPENAI_API_KEY`, `OPENROUTER_API_KEY`,
+`DEEPSEEK_API_KEY`, OpenRouter, direct DeepSeek, Responses API, or Chat
+Completions API in the LangGraph runtime. Repository code must never read or
+copy OAuth credentials; verify authentication only through public SDK account
+metadata. Both leader and follower threads explicitly configure
+`gpt-5.6-luna`.
 
 ## START HERE
 
@@ -23,14 +35,17 @@ If a gate needs human action (see "Human checkpoints" below), ask and
 wait — do not mark a gate passed on your own judgment of a visual or
 physical check.
 
-## System overview (see docs/stack.md for details)
+## System overview (see docs/architecture.md and docs/stack.md)
 
-- Game I/O comes from the `computer-control-mcp` MCP server
-  (screenshot via WGC, key press/hold, OCR). Do NOT write your own
-  screen-capture or input-injection code.
-- `spine/` — the tick loop: screenshot -> follower VLM -> movement key,
-  every ~500ms. Reflex layer (pure code, YOLO-based threat vectors)
-  overrides the follower on imminent collision.
+- LangGraph owns the durable goal loop, leader/follower turns, routing,
+  checkpoint/resume, retries, and completion state.
+- `spine/agent_subgraphs.py` owns separately compiled leader/follower graphs;
+  `spine/codex_sdk_client.py` invokes them through the official SDK/app-server,
+  uses distinct persistent role threads, and never accepts an API key.
+- `spine/game_tools.py` exposes bounded operations over `io_adapter.py`,
+  `launch.py`, `perceive.py`, `controller.py`, and `trace.py`.
+- The reflex/controller layer runs the real-time control window and overrides
+  unsafe follower proposals. No model writes input directly.
 - `prompts/` — follower.md, leader.md, review_autopsy.md,
   review_build.md. These, plus `spine/config.yaml` controller
   parameters, are the ONLY files the experiment loop may mutate.
@@ -45,19 +60,35 @@ physical check.
 - G0 PLUMBING: fully automated self-verification, human is the
   fallback only:
   a. LAUNCH: `steam steam://rungameid/1794680` (Vampire Survivors app
-     id). Game in windowed mode at a fixed resolution — set once,
-     never change (templates and click coordinates depend on it).
+     id). Game must be **fullscreen** on the fixed capture monitor at
+     one calibrated resolution — set once, never change (click
+     coordinates and the capture-to-hit-test transform depend on it).
+     Do not run scored or vision-menu sessions while the desktop is
+     being used; window focus/size flicker invalidates calibration.
   b. CAPTURE: screenshot returns real frames (not black — if black,
-     switch capture to WGC automatically).
+     switch capture to WGC automatically). Capture resolution must
+     match `capture_calibration_resolution` in spine/config.yaml.
+
   c. KEYS: send one DOWN-arrow at the main menu; verify via
      screenshot diff that the menu highlight moved. If not, try the
      alternate injection path once; if still dead, write
      status/BLOCKED.md for the human.
-  d. MENU MACRO: spine/launch.py navigates main menu -> Antonio ->
-     Mad Forest via a fixed key sequence with an OCR checkpoint after
-     each step (expected screen text), not blind sleeps.
-  e. MOVE CHECK: in-game, send a movement key for 2s; verify player
-     position changed between frames. All five checks log evidence to
+  d. MENU MACRO: spine/launch.py navigates the observed two-screen route:
+     main menu -> Character Selection -> Antonio -> Confirm -> Stage
+     Selection -> Mad Forest -> Start. It must verify the selected-card
+     focus and the selected-stage focus; text merely appearing in a list is
+     not evidence of selection. Menu inputs are bounded and checkpointed,
+     not blind sleeps.
+  e. INPUT CALIBRATION: WGC capture coordinates and Windows hit-test
+     coordinates are independently calibrated and recorded. At the current
+     fixed display this is a 1.25x frame-to-hit-test transform; any changed
+     resolution, DPI, monitor, or capture backend invalidates the calibration.
+  f. RECOVERY / ATTACH: a running episode can attach to an already-live
+     in-game or level-up screen without replaying the menu macro. It must
+     neutralize first, identify the live state, and hand level-up choice and
+     movement back to the controller.
+  g. MOVE CHECK: in-game, send a movement key for 2s; verify player
+     position changed between frames. All checks log evidence to
      status/gates.md. G0 passes with zero human involvement unless a
      check fails after its one retry.
 - G1 MOVEMENT: blind reflex bot holds a strafe pattern and survives
@@ -65,7 +96,7 @@ physical check.
 - G1.5 EVAL SET: capture ~500 frames from the reflex bot's own G1
   runs (no human play session). Build eval_set/: 100 frames with
   ground-truth labels (threat octant, gem octant, is-level-up,
-  correct direction). Labels are generated by the LEADER-class model
+   correct direction). Labels are generated by the leader-role model
   applying the rubric in docs/game_reference.md section 6, then
   audited by a second model pass; disagreements are flagged and
   queued for the human via status/HUMAN_NEEDED.md (expected to be a
@@ -74,7 +105,7 @@ physical check.
 - G2 PERCEPTION: follower VLM returns structured state with >90%
   field accuracy on 20 human-checked frames.
 - G3 SURVIVAL: full stack survives 5 minutes, 3 runs in a row.
-- G4 LEADER: level-up picks sensible; survive 10+ minutes.
+- G4 leader: level-up picks sensible; survive 10+ minutes.
 - G5 TRACE: complete episode recorded per docs/trace_spec.md.
 - G6 LEARNING: begin the experiment loop below.
 
@@ -148,8 +179,10 @@ model understand what we ask and answer reliably"; Loop C answers
   prompts. Write docs/analysis/plateau.md (dominant failure type,
   what was tried, what structural change might help), then attempt
   exactly ONE structural change as the next experiment.
-- Eval conditions are FIXED: Mad Forest, Antonio, no arcanas, default
-  modifiers. Never change eval conditions and compare scores across
+- Eval conditions are FIXED: Mad Forest, Antonio, and an explicit modifier
+  baseline. `default modifiers` is not an executable condition: config must
+  name the enabled/disabled state of Hyper, Hurry, Arcanas, Limit Break,
+  Inverse, and Endless before any scored run. Never change eval conditions and compare scores across
   the change.
 - Never modify the game installation, episodes/, eval_set/,
   experiments.log, or theories.jsonl retroactively (theory status

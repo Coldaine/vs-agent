@@ -2,6 +2,21 @@
 
 Append-only record of gate progress. Evidence-based (GOAL.md).
 
+## G0 live-control recalibration — 2026-07-28
+
+**Verdict:** IN PROGRESS — prior selector/input blocker cleared; G0 is not
+yet passed.
+
+- Live keyboard route selected `Antonio Belpaese (Legacy)` and `Confirm`
+  opened the separate Stage Selection screen.
+- Mad Forest was selected by bounded directional navigation; Arcana was
+  disabled through the calibrated 1.25x WGC-frame-to-hit-test transform.
+- Start reached a live HUD and level-up overlay at 00:16
+  (`status/g0_gameplay_hud.jpg`).
+- This was a calibration run only. Hurry and Limit Break were enabled, so the
+  modifier baseline is not yet a fixed evaluation condition. Attach/recovery
+  and the two-second movement evidence also remain.
+
 ## Session 1 — seam fill + G0 attempt (2026-07-23)
 
 BUILDER work completed (code, no live env required):
@@ -189,4 +204,241 @@ doppler run -- python spine/run.py --reflex-only
 - capture_mean_brightness: 92.87
 - key_diff: 0.911
 - key_ocr_before: a@  ae Character Selection 7  -.  &  me oreres  = ess) (? 1 :  | ry an : ah  ® : . : gy A | 2 Ss Bio ¢: »  Bit | ftw) ¥E 2  a  fe 2S 4) a9  i _ ' a  ms y ial 
-- key_ocr_after: wt  ; ie  ’ ? e +35% oy Sy oS a oF ay +420% ar : Bla oS ol ole & +1 5 3 a - a eZ, ey | a- qi a +50% ' bx 30% a | -  +50% ’ ied +4 re 4 a oI) +10 | comer ser | :  ft a = jo dit 
+- key_ocr_after: wt  ; ie  ’ ? e +35% oy Sy oS a oF ay +420% ar : Bla oS ol ole & +1  5  3 a - a eZ, ey | a- qi a +50% ' bx  30% a | -  +50% ’ ied +4 re  4 a oI) +10 | comer ser | :  ft a = jo dit 
+
+## G0 Plumbing Gate — 2026-07-28 03:08:51
+
+**Verdict:** FAILED
+
+**Results:**
+- launch: PASS
+- capture: PASS
+- keys: PASS
+- menu_macro: FAIL (expected one of ['CHARACTER_SELECT', 'MAIN_MENU', 'STAGE_SELECT', 'TITLE', 'WARNING'], got UNKNOWN: 'ROCKSTAR | 28029 | — | FILTER: OFF ® : G ¢ & CS =) A AED A | GEO 6 IB BEEEE EERE ES ERED : : DB A EC) BS) 5 | SS AL AR AE AF É FE RAMBA :| FI W ~ ; VV] : |S 1G OFLF EO) IE | O R, X')
+
+**Evidence:**
+- launch_state: CHARACTER_SELECT
+- capture_resolution: 2562x1479
+- capture_mean_brightness: 92.02
+- key_diff: 0.0276
+- key_ocr_before: Character Selection a: fal al B14 | | S| fi a) BE Of w | =oF B= - =~} # a # R J 4 40 . wis Ramba a ~~ - Gst6 b: : F a — OU Al @) ec & Fk ! 7 Am
+- key_ocr_after: Rockstar | 28029 | — | : Ne a FR : if ua ve ad & ef Ramba | : B® Go Mel va | & : ° : Ambrojoe i >. & r oF “h — _ 7) a : A) 7) «| 22? 22? 2??? = i cy ] eam ff LS ee, “ (=) 
+
+## G0 Plumbing Gate — 2026-07-28 03:13:25
+
+**Verdict:** FAILED
+
+**Results:**
+- blocked: BLOCKED
+
+**Evidence:**
+- blocked_status: status/BLOCKED.md is active
+
+## G0 Plumbing Gate — 2026-07-28 03:13:56
+
+**Verdict:** FAILED
+
+**Results:**
+- launch: PASS
+- capture: PASS
+- keys: PASS
+- menu_macro: FAIL (expected one of ['STAGE_SELECT'], got CHARACTER_SELECT: 'ROCKSTAR ¥ CLOCK SPEED ES) +| XP BONUS 28029 STAGE SELECTION GREEN ACRES FATE CHANGES BY THE MINUTE IN A REALM WHERE MORTALS CAN ONLY TRESPASS. WHAT EEL REWARDS AWAIT THOSE WHO CHA')
+
+**Evidence:**
+- launch_state: CHARACTER_SELECT
+- capture_resolution: 2562x1479
+- capture_mean_brightness: 68.26
+- key_diff: 0.0253
+- key_ocr_before: — 7 Rockstar 28029 L | = i r. ‘ , ae) Stage Selection " Moongolow Legend tells of a city swallowed by the r fis i sea under a full moon’s callous watch. F | Pai Home to mysteries u
+- key_ocr_after: Rockstar & 28029 ack io” oO Stage Selection Green Acres Fate changes by the minute in a realm where mortals can only trespass. What oft rs or] rewards await those who challenge its
+- stage_text: ROCKSTAR STAGE SELECTION GREEN ACRES (ENOIBLENICYE THE BONE ZONE <——2CHALLENGES WHITEOUT FATE CHANGES BY THE MINUTE IN A REALM WHERE MORTALS CAN ONLY TRESPASS. WHAT REWARDS AWAIT T
+
+## G0 Plumbing Gate — 2026-07-28 03:14:02
+
+**Verdict:** FAILED
+
+**Results:**
+- blocked: BLOCKED
+
+**Evidence:**
+- blocked_status: status/BLOCKED.md is active
+
+## G0 Plumbing Gate — 2026-07-28 03:14:40
+
+**Verdict:** FAILED
+
+**Results:**
+- launch: PASS
+- capture: PASS
+- keys: PASS
+- menu_macro: PASS
+- move: FAIL (expected one of ['IN_GAME'], got STAGE_SELECT: 'ROCKSTAR STAGE SELECTION GREEN ACRES (ENOIBLENICYE THE BONE ZONE <——2CHALLENGES WHITEOUT FATE CHANGES BY THE MINUTE IN A REALM WHERE MORTALS CAN ONLY TRESPASS. WHAT REWARDS AWAIT T')
+
+**Evidence:**
+- launch_state: STAGE_SELECT
+- capture_resolution: 2562x1479
+- capture_mean_brightness: 72.17
+- key_diff: 0.0645
+- key_ocr_before: — 7 Rockstar &: 28029 a _ at q , ae) Stage Selection $$ - A Fate changes by the minute in a realm rm " Sieat aeses where mortals can only trespass. What Eel rewards await those who
+- key_ocr_after: Rockstar & 28029 ack io” oO Stage Selection Green Acres Fate changes by the minute in a realm where mortals can only trespass. What oft rs or] rewards await those who challenge its
+- stage_text: ROCKSTAR STAGE SELECTION GREEN ACRES (ENOIBLENICYE THE BONE ZONE <——2CHALLENGES WHITEOUT FATE CHANGES BY THE MINUTE IN A REALM WHERE MORTALS CAN ONLY TRESPASS. WHAT REWARDS AWAIT T
+
+## G0 Plumbing Gate — 2026-07-28 05:16:02
+
+**Verdict:** FAILED
+
+**Results:**
+- launch: FAIL (expected one of ['CHARACTER_SELECT', 'MAIN_MENU', 'STAGE_SELECT', 'TITLE'], got WARNING: 'PHOTOSENSITIVITY WARNING THIS GAME CONTAINS BRIGHT FLASHING LIGHTS. PLEASE IMMEDIATELY STOP PLAYING AND CONSULT A DOCTOR IF YOU EXPERIENCE LIGHTHEADEDNESS, ALTERED VISION, EYE OR F')
+
+**Evidence:**
+
+## G0 Plumbing Gate — 2026-07-28 05:18:14
+
+**Verdict:** FAILED
+
+**Results:**
+- launch: PASS
+- capture: PASS
+- keys: PASS
+- menu_macro: FAIL (expected one of ['CHARACTER_SELECT', 'MAIN_MENU', 'STAGE_SELECT', 'TITLE', 'WARNING'], got UNKNOWN: 'ROCKSTAR | 28029 | — | & A B A AMBROJOE ® : G ¢ & CS =) A AED A | GEO 6 IB BEEEE EERE ES ERED ROCKSTAR | 28029 | (_MERCOW , : WL & AL BL BL E 4 OA AE A É A RAMBA | W ~ ; = : B® GO ')
+
+**Evidence:**
+- launch_state: CHARACTER_SELECT
+- capture_resolution: 2562x1472
+- capture_mean_brightness: 91.26
+- key_diff: 0.0277
+- key_ocr_before: Rockstar ([& 22) —) =p Character Selection & fit |) ft a |) FE @  | S| fi a) BE Of is .— ! -—% bee 1 - =~} # a # R J 4 40 . wis Ramba a ~~ - Gst6 b: : F a — OU Al @) ec & Fk ! 7 Am
+- key_ocr_after: |  : | & a) So) Rl y | Gx oh Ae af & Ramba .  : ¢ ir  "ae = ] : B® Go Mel va | & : ° : Ambrojoe 4 i  il me | OCeroes| E 2 : , a 22? 22? 22? Random " 2 momen | |  2 = 
+
+## G0 Plumbing Gate — 2026-07-28 05:18:56
+
+**Verdict:** FAILED
+
+**Results:**
+- launch: PASS
+- capture: PASS
+- keys: FAIL (main-menu highlight diff too low: 0.0051)
+
+**Evidence:**
+- launch_state: CHARACTER_SELECT
+- capture_resolution: 2562x1472
+- capture_mean_brightness: 90.72
+
+## G0 Plumbing Gate — 2026-07-28 05:24:14
+
+**Verdict:** FAILED
+
+**Results:**
+- launch: PASS
+- capture: PASS
+- keys: PASS
+- menu_macro: FAIL (could not select fixed eval character 'Antonio' after bounded character-menu search; last OCR: "ROCKSTAR ENTER CO-OP FILTER: OFF A CHARACTER SELECTION | FILTER: OFF | I ' LS CR * | 5 = I RE TH ; A I — FS")
+
+**Evidence:**
+- launch_state: CHARACTER_SELECT
+- capture_resolution: 2562x1472
+- capture_mean_brightness: 90.72
+- key_diff: 0.0051
+- key_ocr_before: Rockstar | 28029 | (_mercow ,  : wl & al Bl Bl e 4 oa Ae a é a Ramba | w ~ ; = : B® Go Mel va | 3 o 7 } ° Ambrojoe s ae > BA @ ie) @. ¢ - 22? 22? 22? Random = mmm (6 EO) aS Cee 
+- key_ocr_after: |  : | & a) So) Rl y | Gx oh Ae af & Ramba .  : ¢ ir  "ae = ] : B® Go Mel va | & : ° : Ambrojoe 4 i  il me | OCeroes| E 2 : , a 22? 22? 22? Random " 2 momen | |  2 = 
+
+## G0 Plumbing Gate — 2026-07-28 09:22:14
+
+**Verdict:** FAILED
+
+**Results:**
+- launch: FAIL (expected one of ['CHARACTER_SELECT', 'MAIN_MENU', 'STAGE_SELECT', 'TITLE', 'WARNING'], got UNKNOWN: '(2) ROCKSTAR A A. 28029 [CENROS } ! VAMPIRE “="S" SURVIVORS ‘EEE. FIRSTSURVIVATON @AE. D= PEP (CREDITS ) (64958327R) @ =. (WE — VAMPIRE AT HE FIRST SURVIVATON IAD 239 GS 3 AGO? > ,')
+
+**Evidence:**
+
+## G0 Plumbing Gate — 2026-07-28 09:22:38
+
+**Verdict:** FAILED
+
+**Results:**
+- blocked: BLOCKED
+
+**Evidence:**
+- blocked_status: status/BLOCKED.md is active
+
+## G0 Plumbing Gate — 2026-07-28 09:23:27
+
+**Verdict:** FAILED
+
+**Results:**
+- launch: PASS
+- capture: PASS
+- keys: FAIL (main-menu highlight diff too low: 0.0032)
+
+**Evidence:**
+- launch_state: CHARACTER_SELECT
+- capture_resolution: 2562x1479
+- capture_mean_brightness: 92.96
+
+## G0 Plumbing Gate — 2026-07-28 09:23:59
+
+**Verdict:** FAILED
+
+**Results:**
+- launch: PASS
+- capture: PASS
+- keys: PASS
+- menu_macro: FAIL (expected one of ['CHARACTER_SELECT'], got UNKNOWN: 'ROCKSTAR @ CA EB “ RN 2 & PA ES) TH 2) E FE BY IDB RRR ERE — ROCIAEA \\&, 28029] -(=«)- GE | <P J OE __ SE NB . B E EE | OO EE | Z +368 & A A 4. VW @ — BIE _)} FE +403 I IU +21% TAL')
+
+**Evidence:**
+- launch_state: CHARACTER_SELECT
+- capture_resolution: 2562x1479
+- capture_mean_brightness: 92.96
+- key_diff: 0.0032
+- key_ocr_before: Bh Vampire survivors = o x Rockstar " | 28029 | [_sacx ) (mercer)  ae Character Selection 7 - = LA a 5 & a TY, ; | @ | Pal A.) tK @ % a i ey) A, a ] ry an " ah & = 5 x  ‘ g 4-8 «|X
+- key_ocr_after: Bh Vampire survivors = o x Rockstar " | 28029 | [_sacx ) (mercer)  ae Character Selection 7 -. : a TY, ] ry an " ah & = 5 x  : ” Fey Ee Bio ¢: » wy ™ Al PS St a) ft a a Rae a Ee i 
+
+## G0 Plumbing Gate — 2026-07-28 09:26:38
+
+**Verdict:** FAILED
+
+**Results:**
+- launch: PASS
+- capture: PASS
+- keys: PASS
+- menu_macro: FAIL (expected one of ['CHARACTER_SELECT'], got UNKNOWN: 'ROCKSTAR COM SEHS GES PHTO OAR ROCKSTAR | 28029 | — | 3 WAT 3 “A | ¢ 2 RP SIE OF 5 HEE 2 TY: RY $0 DEL BEL. 6 MP =) 2 OE ALLE & “I : AY “3 7) A 2 | FAL I = & 1 = TY = |')
+
+**Evidence:**
+- launch_state: CHARACTER_SELECT
+- capture_resolution: 2562x1479
+- capture_mean_brightness: 92.97
+- key_diff: 0.0031
+- key_ocr_before: a —— Rockstar (\& 28029] ~(=e)- E=_ | <p I Th r " a nd  . B 1B) Z +368 & a A 4. vw g — bie | i +403 1 rn +21% "iy  & a 7 ok qi ® _ s *- mn Ea Q 2 bd +31% 55 = zs es fee ; +50% : : 
+- key_ocr_after: Bh Vampire survivors = o x Rockstar " | 28029 | [_sacx ) (mercer) ms . Ss = i" & - ——= = ae Character Selection 7 ; | ' Te. P ih ; | «| Pall Ra) ih . A cl a Dy : ] @ =" ¢ a : | 2 «
+
+## Live vertical slice (first real run under LangGraph + Codex SDK) — 2026-07-31
+
+**Verdict:** IN PROGRESS — live loop proven end-to-end; game process exited mid-run (no crash record).
+
+**Command:**
+```
+.venv\Scripts\python.exe spine\run.py --entry-only --goal "Reach an in-game Mad Forest HUD as Antonio with all six modifiers false. Prefer keyboard. Stop once the run has started." --thread-id "g0-vision-fullscreen"
+```
+
+**Proven live:**
+- WGC capture of the running game returned exactly 2560x1440, mean brightness 46.09,
+  and `assert_capture_contract` PASSED against `capture_calibration_resolution`.
+- Full vertical slice executed: prepare -> observe -> real OAuth leader (gpt-5.6-luna)
+  -> schema-valid menu actions -> controller sent real keyboard input -> re-observe.
+  Evidence: 7 saved observation keyframes in `episodes/run_1785488771608/keyframes/`.
+- Input visibly changed the screen: consecutive-frame mean abs diffs up to 63.3
+  (0->1 0.052, 1->2 63.323, 2->3 0.673, 3->4 0.787, 4->5 11.165, 5->6 8.674).
+  Controller evidence: `menu:confirm`, `menu:start`, `menu:up` x4.
+
+**Live bug found and FIXED (commit 878446c):**
+- First run failed at the SDK call: `invalid_request_error 'allOf' is not permitted`
+  for `codex_output_schema`. `MENU_LEADER_SCHEMA` had an `allOf`/`if`/`then`/`else`
+  conditional that the Codex SDK rejects. Flattened the schema; the
+  click-when-action=click invariant is enforced deterministically by
+  `SpineGameTools.menu_action`. 87 unit tests pass.
+
+**Open issue (next G0 blocker):**
+- After 6 inputs the game window vanished; process `VampireSurvivors` is gone.
+  Windows Application event log shows no crash record for the game in the last hour,
+  so it exited/closed without a crash. Relaunch fresh and retry; monitor whether the
+  instance survives the run.

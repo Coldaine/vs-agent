@@ -111,3 +111,4 @@ def veto_check(proposed: str, dets: list[Detection], player: Detection,
         if dot > 0.5:  # within ~60 deg cone ahead
             return True
     return False
+

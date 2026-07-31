@@ -1,143 +1,160 @@
-"""run.py — one episode of Vampire Survivors.
+"""Run the LangGraph Vampire Survivors goal runtime.
 
-Usage:
-  python spine/run.py                  # one episode
-  python spine/run.py --seed-set eval  # eval episode (fixed conditions)
-
-Structure: perception (YOLO+OCR, builder's seam) -> follower proposal
-(async, OpenAI-compatible endpoint) -> controller (deterministic) ->
-trace. Level-up screens hand off to the leader. Every exit path
-neutralizes the controller — no runaway held inputs overnight.
+Authentication is CHATGPT PRO OAUTH ONLY through the official Codex SDK. This
+entry point does not accept an OpenAI API key, API endpoint, provider override,
+or model override.
 """
 
 from __future__ import annotations
-import argparse, json, os, sys, time, threading
+
+import argparse
+import asyncio
+import json
+import os
+import uuid
+from pathlib import Path
+
 import yaml
-from io_adapter import IOAdapter
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+
+from agent_subgraphs import AgentRuntime
+from codex_sdk_client import CodexAgentClient
 from controller import Controller
-from trace import EpisodeWriter, hash_prompt
-import reflex
-import launch
-import model_client          # builder: OpenAI-compatible client wrapper
-import perceive              # builder: YOLO detections + OCR state
+from game_tools import SpineGameTools
+from goal_graph import build_goal_graph, run_goal
+from io_adapter import IOAdapter
 
 
-def follower_loop(io, controller, cfg, stop, prompt_text, shared):
-    """Async follower: proposes directions without blocking the tick.
-    Reads shared['brief'] EVERY iteration so leader brief_updates
-    propagate — passing brief by value here was bug #1 found in audit."""
-    while not stop.is_set():
-        try:
-            frame = io.screenshot()
-            state = perceive.state_summary(frame)
-            t0 = time.monotonic()
-            direction = model_client.call_follower(
-                prompt_text, state, frame, shared["brief"])
-            latency = (time.monotonic() - t0) * 1000
-            if not controller.submit_follower_proposal(direction, latency):
-                perceive.log_protocol_violation(direction)
-        except Exception as e:
-            print(f"[follower] {e}", file=sys.stderr)
-            time.sleep(0.1)
+DEFAULT_GOAL = (
+    "Complete a fixed-condition Mad Forest run and produce deterministic "
+    "evidence that survival reached at least 540 seconds."
+)
 
 
-def _detect_for_tick(frame, reflex_only: bool):
-    """G1 remains usable when the optional detector is unavailable."""
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Run the LangGraph leader/follower through ChatGPT Pro OAuth. "
+            "OpenAI API keys and compatible HTTP APIs are forbidden."
+        )
+    )
+    parser.add_argument("--goal", default=DEFAULT_GOAL)
+    parser.add_argument(
+        "--thread-id",
+        default=None,
+        help="Durable LangGraph thread to create or resume (default: generated)",
+    )
+    parser.add_argument("--retries", type=int, default=0)
+    parser.add_argument(
+        "--checkpoint",
+        default="runtime/langgraph-goals.sqlite3",
+        help="Local LangGraph checkpoint database",
+    )
+    parser.add_argument("--config", default="spine/config.yaml")
+    parser.add_argument(
+        "--attach",
+        action="store_true",
+        help=(
+            "Attach to an already-live IN_GAME or LEVEL_UP screen; "
+            "skip vision menu entry."
+        ),
+    )
+    parser.add_argument(
+        "--entry-only",
+        action="store_true",
+        help=(
+            "Succeed when the vision leader reaches an in-game HUD; "
+            "do not continue into survival scoring."
+        ),
+    )
+    return parser
+
+
+async def run_langgraph_goal(
+    goal: str,
+    *,
+    thread_id: str,
+    retries: int,
+    checkpoint_path: str,
+    config_path: str,
+    attach: bool = False,
+    entry_only: bool = False,
+) -> dict:
+    """Run one goal under one checkpoint-bound Codex SDK lifecycle."""
+
+    cfg = yaml.safe_load(Path(config_path).read_text(encoding="utf-8"))
+    checkpoint = Path(checkpoint_path)
+    checkpoint.parent.mkdir(parents=True, exist_ok=True)
+    io = None
+    tools = None
+    runtime = None
+
     try:
-        return perceive.detect(frame)
-    except (FileNotFoundError, ImportError, RuntimeError) as error:
-        if not reflex_only:
-            raise
-        print(f"[reflex-only] detector unavailable: {error}", file=sys.stderr)
-        return [], reflex.Detection(frame.width / 2.0, frame.height / 2.0, "player")
-
-
-def run_episode(eval_mode: bool, reflex_only: bool = False, disable_leader: bool = False):
-    cfg = yaml.safe_load(open("spine/config.yaml"))
-    io = IOAdapter(backend=os.environ.get("VS_IO_BACKEND", "auto"), config=cfg)
-    controller = Controller(io, cfg)
-    run_id = f"run_{int(time.time())}"
-    ep = EpisodeWriter(cfg["episodes_dir"], run_id)
-    follower_prompt = open("prompts/follower.md").read() if not reflex_only else ""
-    leader_prompt = open("prompts/leader.md").read() if not disable_leader else ""
-    # mutable cell so the leader's brief_update reaches the follower
-    shared = {"brief": "Early game: farm gems near open ground, orbit clockwise."}
-    stop = threading.Event()
-    latencies, start = [], time.monotonic()
-
-    try:
-        launch.to_stage_select(io, cfg)          # launch + menu macro
-        launch.start_run(io, cfg)
-        
-        if not reflex_only:
-            fw = threading.Thread(target=follower_loop,
-                                args=(io, controller, cfg, stop,
-                                        follower_prompt, shared), daemon=True)
-            fw.start()
-
-        tick_s = 1.0 / cfg["tick_hz"]
-        while True:
-            tick_t0 = time.monotonic()
-            frame = io.screenshot()
-            screen_type = perceive.screen_type(frame, cfg)
-
-            if screen_type == "LEVEL_UP":
-                options = perceive.read_options(frame)
-                if not disable_leader:
-                    pick = model_client.call_leader(leader_prompt, frame,
-                                                    options, shared["brief"])
-                    ep.log_leader(options, pick["pick"], pick["why"],
-                                pick["brief_update"])
-                    shared["brief"] = pick["brief_update"]
-                    launch.select_option(io, pick["pick"], options)
-                else:
-                    # Default to option 1 if leader disabled
-                    launch.select_option(io, 1, options)
-                continue
-
-            if screen_type in ("DEATH", "RUN_END"):
-                break
-
-            dets, player = _detect_for_tick(frame, reflex_only)
-            result = controller.tick(dets, player, screen_type, strafe=reflex_only)
-            if result.follower_latency_ms:
-                latencies.append(result.follower_latency_ms)
-            st = perceive.hud_state(frame)
-            ep.log_tick(st["hp"], st["level"], st["timer"],
-                        st["inventory"],
-                        reflex.threats_by_octant(dets, player),
-                        reflex.gems_by_octant(dets, player),
-                        result.rule_fired, result.follower_latency_ms,
-                        result.action, result.rule_fired == "veto")
-            ep.save_frame(perceive.to_jpeg(frame))
-
-            elapsed = time.monotonic() - tick_t0
-            if elapsed < tick_s:
-                time.sleep(tick_s - elapsed)
-
+        io = IOAdapter(backend=os.environ.get("VS_IO_BACKEND", "auto"), config=cfg)
+        controller = Controller(io, cfg)
+        tools = SpineGameTools(
+            cfg, io, controller, attach=attach, entry_only=entry_only
+        )
+        async with AsyncSqliteSaver.from_conn_string(str(checkpoint)) as checkpointer:
+            graph = build_goal_graph(checkpointer)
+            config = {
+                "configurable": {"thread_id": thread_id},
+                "recursion_limit": 1000,
+            }
+            snapshot = await graph.aget_state(config)
+            if snapshot.values:
+                restore = getattr(tools, "restore_checkpoint", None)
+                if restore is not None:
+                    restore(dict(snapshot.values))
+            runtime = AgentRuntime.from_checkpoint(
+                snapshot.values or {},
+                tools,
+                codex_factory=CodexAgentClient,
+            )
+            await runtime.codex.start()
+            return await run_goal(
+                graph,
+                goal,
+                thread_id,
+                runtime,
+                retries=retries,
+            )
     finally:
-        stop.set()
-        controller.neutralize()          # every exit path, no exceptions
-        io.close()
-        survived = time.monotonic() - start
-        p95 = (sorted(latencies)[int(len(latencies) * .95)]
-               if latencies else 0)
-        invalid = p95 > 800
-        ep.close(survived_s=round(survived, 1),
-                 level=perceive.last_level, kills=perceive.last_kills,
-                 invalid=invalid,
-                 prompt_hashes={"follower": hash_prompt("prompts/follower.md"),
-                                "leader": hash_prompt("prompts/leader.md")})
-        print(json.dumps({"run_id": run_id, "survived_s": survived,
-                          "invalid": invalid, "p95_ms": p95}))
+        if tools is not None:
+            tools.neutralize()
+        try:
+            if runtime is not None:
+                await runtime.codex.close()
+        finally:
+            if tools is not None:
+                tools.close()
+            elif io is not None:
+                io.close()
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    thread_id = args.thread_id or f"goal-{uuid.uuid4()}"
+    state = asyncio.run(
+        run_langgraph_goal(
+            args.goal,
+            thread_id=thread_id,
+            retries=args.retries,
+            checkpoint_path=args.checkpoint,
+            config_path=args.config,
+            attach=args.attach,
+            entry_only=args.entry_only,
+        )
+    )
+    print(json.dumps({
+        "thread_id": thread_id,
+        "status": state["status"],
+        "reason": state["reason"],
+        "evidence": state["evidence"],
+        "authentication": "ChatGPT Pro OAuth via official Codex SDK",
+    }))
+    return 0 if state["status"] == "achieved" else 2
 
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--seed-set", default=None)
-    ap.add_argument("--reflex-only", action="store_true")
-    ap.add_argument("--disable-leader", action="store_true")
-    args = ap.parse_args()
-    run_episode(eval_mode=args.seed_set == "eval",
-                reflex_only=args.reflex_only,
-                disable_leader=args.disable_leader)
+    raise SystemExit(main())

@@ -1,58 +1,19 @@
-# HUMAN_NEEDED — one-time provisioning to start the gates
+# HUMAN_NEEDED — fullscreen + unattended run (Refreshed 2026-07-31)
 
-The BUILDER has filled all three seams and the harness compiles, but
-the live environment needs five things only you can supply. None of
-these are guesses the BUILDER may safely make (secrets, a fixed
-resolution choice, and a trained model file).
+No model API key is needed. Auth is ChatGPT Pro OAuth via `codex login status`. All naming conventions have been unified to `leader` and `follower` (eliminating `planner` and `pilot` references).
 
-## 1. Launch with provider keys injected
+Before the next vision-menu / G0 attempt:
 
-No `.env` is needed. Start the process through any Doppler project/config
-that injects `DEEPSEEK_API_KEY` and `OPENROUTER_API_KEY`, for example:
+1. Open Vampire Survivors → **Options** → set **Fullscreen** (not windowed) on the correct physical monitor.
+2. Leave the game on the fixed capture monitor (the one used for WGC / `wgc_monitor_origin`).
+3. Run the prepare sequence or verify and set `capture_calibration_resolution` in `spine/config.yaml` to that exact fullscreen size. 
+4. Run unattended — do not use the desktop while the agent holds focus, to prevent aspect ratio or coordinate scaling glitches.
 
-```
-doppler run -- python spine/run.py
-```
+Suggested unattended command for G0 entry verification (using unified leader/follower terminology):
 
-The repository does not name or pin the Doppler source. DeepSeek is called
-directly for leader/reviewer text roles; OpenRouter `openrouter/free` is used
-for follower/labeler vision roles.
-
-## 2. Install Python dependencies
-
-```
-cd d:\_projects\VampireSurvivor\vs-agent
-uv pip install -r requirements.txt      # or: python -m pip install -r requirements.txt
+```powershell
+.venv\Scripts\python.exe spine\run.py --entry-only --goal "Reach an in-game Mad Forest HUD as Antonio with all six modifiers false. Prefer keyboard. Stop once the run has started." --thread-id "g0-vision-fullscreen"
 ```
 
-(ultralytics pulls in torch — large. A CUDA build is recommended on
-the RTX 5090.)
+Adjudicate model-label disagreements in `eval_set/disagreements.json` only when G1.5 runs.
 
-## 3. Tesseract OCR binary
-
-pytesseract needs the Tesseract engine on PATH (HUD, timer, level-up
-option text). Install it, then confirm `tesseract --version` works.
-
-## 4. Detector weights (the reflex layer's eyes)
-
-Fork the YOLOv8 weights from victorcoelh/vampire-survivors-bot (or the
-CV alternative). Put the weights file somewhere stable and set in
-`spine/config.yaml`:
-
-- `yolo_weights: <path to .pt weights>`
-- `yolo_class_map:` — map each of the model's class NAMES to one of
-  `enemy | elite | gem | player`. Elites are weighted x3 automatically.
-
-## 5. Fix the resolution + calibrate HUD crops (once, then never change)
-
-Set Vampire Survivors to WINDOWED mode at a fixed resolution. Then fill
-the `hud_regions` crop boxes `[x0, y0, x1, y1]` in `spine/config.yaml`
-(hp, level, timer, level_up_options) measured in window pixels. Leave
-them `null` only for a first smoke test; accurate HUD/leader behaviour
-needs them.
-
-## When done
-
-Confirm here in writing, then the BUILDER resumes at G0 through Doppler
-and records evidence in status/gates.md.
-Delete status/BLOCKED.md when the environment is up.

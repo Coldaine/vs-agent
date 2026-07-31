@@ -9,7 +9,18 @@ gem_pull_weight: 0.3
 # eval conditions (FIXED — never change and compare scores across)
 stage: "Mad Forest"
 character: "Antonio"
+# All six modifiers are explicit because "default modifiers" is not a
+# reproducible evaluation condition. The menu adapter must verify this baseline.
+hyper: false
+hurry: false
 arcanas: false
+limit_break: false
+inverse: false
+endless: false
+goal_target_survival_s: 540
+# Vision leader menu-entry budget (one screenshot/action per step).
+menu_steps_budget: 80
+menu_action_settle_s: 0.35
 
 # perception
 level_up_ocr_trigger: "LEVEL UP"
@@ -20,18 +31,50 @@ window_title_hint: "Vampire Survivors"
 steam_app_id: "1794680"
 capture_backend: wgc
 input_backend: keyboard
+# Fixed-display calibration: WGC frame coords * scale = Windows hit-test.
+# REQUIRE fullscreen on the capture monitor. Windowed/border flicker
+# (e.g. 2562x1479 vs 2560x1380) invalidates clicks — run unattended.
+# Recalibrate these numbers once after setting Options → Fullscreen.
+require_fullscreen: true
+capture_to_input_scale: 1.25
+capture_calibration_resolution: [2560, 1440]
+capture_calibration_resolutions:
+  - [2560, 1440]
+capture_calibration_tolerance_px: 8
+capture_contract_wait_s: 3.0
 gamepad_ready_timeout_s: 3.0
 gamepad_create_retries: 3
 gamepad_recreate_on_error: true
 gamepad_button_hold_s: 0.3
-# This save starts on Gennaro (row 2, col 1); Antonio is row 1, col 2.
-antonio_selection_path: [up, right]
+# Character selection persists between attempts. Search is bounded and every
+# move is OCR-checked before confirming the fixed Antonio evaluation choice.
+character_search_directions: [up, left, right, down]
+character_search_max_steps: 32
+# Calibrated on the G0 fixed 2562x1472 capture: click the grid scrollbar top,
+# then Antonio's card. The detail-panel OCR is the proof before confirmation.
+character_scroll_top_frame: [1786, 355]
+character_target_frame: [1137, 379]
+character_selected_label_region: [720, 1200, 1800, 1470]
+# Antonio card focus corners derived from paired native 2562x1472 captures.
+character_target_rect: [1015, 308, 228, 237]
+# The saved stage persists across attempts.  Search is bounded and every
+# transition is OCR-checked before the run-start guard is allowed to confirm.
+stage_search_directions: [up, down]
+stage_search_max_steps: 32
 # WGC frame coordinates on the physical left monitor (origin -2560, 0).
 wgc_monitor_origin: [-2560, 0]
 # DXCam output zero is the primary display. This game window runs on output 1.
 capture_output_idx: 1
 capture_min_dimensions: [640, 480]
-capture_retries: 3
+capture_retries: 5
+# Backoff between capture retries. A ~2.5s total window absorbs transient
+# WGC black frames during game/menu transitions without failing a run.
+capture_retry_delay_s: 0.5
+# G0 character-grid cursor changes affect a small fraction of the 2562x1472
+# frame. Calibrated from the live 0.0051 mean pixel delta; retain margin while
+# still requiring a visible screenshot change.
+# Character-grid cursor changes are tiny on 2562x1479; live G0 saw 0.0032.
+key_diff_threshold: 0.003
 movement_diff_threshold: 0.1
 tesseract_cmd: "C:/Program Files/Tesseract-OCR/tesseract.exe"
 menu_ocr_config: "--psm 6"
@@ -51,6 +94,11 @@ hud_regions:
   level: null
   timer: null
   level_up_options: null
+
+# OCR triggers for screen state detection
+level_up_ocr_trigger: "LEVEL UP"
+death_ocr_triggers: ["YOU DIED", "GAME OVER", "GNMEOVER", "GAME OVER &"]
+run_end_ocr_triggers: ["REAPER", "TIME'S UP", "STAGESET"]
 
 # paths
 episodes_dir: "episodes"

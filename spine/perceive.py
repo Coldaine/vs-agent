@@ -174,3 +174,4 @@ def log_protocol_violation(raw_output: str):
     import json, time
     with open("protocol_violations.jsonl", "a") as f:
         f.write(json.dumps({"raw": raw_output, "t": time.time()}) + "\n")
+

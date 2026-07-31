@@ -1,3 +1,4 @@
-"""Vampire Survivors leader-follower agent harness."""
+"""Vampire Survivors planner-pilot agent harness."""
 
 __version__ = "0.1.0"
+

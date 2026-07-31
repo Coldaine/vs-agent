@@ -1,98 +1,36 @@
-# AGENTS.md — repo conventions for the BUILDER
+# AGENTS.md — repository router
 
-## READ THIS FIRST: who you are and what exists
+## Authority order
 
-There are THREE agents in this project. Do not confuse them.
+1. `GOAL.md` — product objective, gates, and experimental invariants.
+2. `docs/architecture.md` — current runtime architecture and security boundaries.
+3. `docs/stack.md` and `docs/controller.md` — component details.
+4. `docs/plans/` — active executable work; it must not contradict the files above.
 
-1. **YOU are the BUILDER.** A coding agent. You write and maintain the
-   harness, run the experiment loops in GOAL.md, and review scores.
-   **You never play the game. You never watch frames in real time. You
-   never make movement or level-up decisions.** If you find yourself
-   reasoning about what the agent should do in a specific game
-   situation, you have drifted into a role that is not yours — that
-   reasoning belongs in prompts/ or config, executed by the other two
-   agents.
+## Non-negotiable runtime rules
 
-2. **The FOLLOWER is an agent you are building.** A fast vision model
-   behind OpenRouter's free vision router. At runtime
-   it sees game frames and proposes movement directions. It is
-   prompted by prompts/follower.md. It does not exist as code you
-   write — it is a model you configure. You improve it by mutating its
-   prompt and by feeding the corpus, never by hardcoding its decisions.
-
-3. **The LEADER is an agent you are building.** A DeepSeek V4 Flash
-   text/reasoning model. At runtime it makes level-up choices and writes
-   strategy briefs. Prompted by prompts/leader.md. Same rule: improve
-   via prompt mutation, never by hardcoding picks.
-
-The thing that actually drives the game is `spine/controller.py` — a
-deterministic state machine (spec: docs/controller.md). The FOLLOWER
-and LEADER only *propose*; the controller decides and is the sole
-writer of keyboard input. Game I/O goes through the
-`computer-control-mcp` MCP server. Do not write capture or input code.
-
-## Stack (see docs/stack.md and docs/why.md for rationale)
-
-| Layer | Implementation | Status |
-|---|---|---|
-| Game I/O | `computer-control-mcp` MCP server (WGC screenshot, key press/hold, OCR) | off the shelf |
-| Reflex perception | forked from victorcoelh/vampire-survivors-bot (YOLOv8 enemy/gem detection) | fork, don't rebuild |
-| Controller | `spine/controller.py` — deterministic arbiter FSM | you write this |
-| Follower + labeler | OpenRouter `openrouter/free` vision router | configure, don't build |
-| Leader + reviewer | direct DeepSeek `deepseek-v4-flash` | configure, don't build |
-| Glue | tick loop, level-up detector, trace logger, review runner, eval runner | ~300-500 lines target |
+- **CHATGPT PRO OAUTH ONLY. NO OPENAI API KEY. NO RESPONSES API. NO CHAT COMPLETIONS API. NO OPENROUTER OR DEEPSEEK API FALLBACK.**
+- Model authentication belongs to the official `openai-codex` SDK and its managed `codex app-server` login. Never read, copy, export, log, or commit its OAuth credentials; use only public SDK account metadata.
+- LangGraph owns goal state, model turns, role routing, checkpoints, and completion evaluation.
+- Both leader and follower explicitly configure the exact model ID `gpt-5.6-luna` on their official SDK threads.
+- Models propose; `spine/controller.py` disposes and remains the sole movement-input writer.
+- `spine/game_tools.py` is the bounded bridge between LangGraph and the existing launch, perception, controller, and trace modules.
+- `episodes/`, `eval_set/`, and experiment ledgers are append-only.
 
 ## Commands
 
-- `python spine/run.py` — play one episode, write episodes/run_<n>/
-- `python spine/run.py --seed-set eval` — one eval episode (fixed
-  stage/character/seed list from spine/config.yaml)
-- `python spine/replay_eval.py --prompt prompts/follower.md` — Loop P:
-  score a prompt variant against eval_set/ offline (no game needed)
-- `python spine/review.py episodes/run_<n>` — spawn review sub-agents,
-  append to failures.jsonl
-- `python spine/verify_perception.py` — G2 gate: dump 20 frames +
-  parsed states for human checking
+- `.venv\Scripts\python.exe spine\smoke_oauth_graph.py` — validate public managed-auth metadata, exact model catalog availability, both child graphs, role threads, schemas, and image input without game input.
+- `.venv\Scripts\python.exe spine\run.py --goal "<completion condition>" --thread-id <id>` — create or resume a LangGraph goal.
+- `.venv\Scripts\python.exe -m unittest discover -s tests -p "test_*.py" -v` — run the suite.
+- `.venv\Scripts\python.exe -m compileall -q spine` — compile check.
+- `.venv\Scripts\python.exe spine\verify_perception.py` — perception evidence helper.
 
-## Conventions
+## Current work
 
-- Model credentials are injected into the process, normally with
-  `doppler run`; do not commit a `.env` file or Doppler scope. Required
-  variables are `OPENROUTER_API_KEY` (follower + labeler vision calls)
-  and `DEEPSEEK_API_KEY` (leader + reviewer text calls). Endpoint URLs
-  and default model IDs are fixed in `spine/model_client.py`.
-- Two ways to involve the human, both via status/:
-  status/HUMAN_NEEDED.md = normal checkpoint (gate sign-off, eval-set
-  labeling, play session); pause that work and continue anything not
-  blocked on it. status/BLOCKED.md = environment broken; halt fully.
-- Every model call is logged: prompt hash, response, latency_ms.
-  Follower latency p95 must stay <800ms; if it exceeds that for a
-  full episode, the run is invalid for eval (outcome.json
-  "invalid": true).
-- Movement actions: N, NE, E, SE, S, SW, W, NW, HOLD. The follower
-  never issues menu clicks; the leader never issues movement. The
-  controller enforces this — a proposal outside a layer's authority
-  is discarded and logged as a protocol violation.
-- Level-up detection: OCR on the pause overlay OR template match on
-  the option card region — whichever is more reliable; measure both
-  during G1 and keep the winner.
-- Sub-agents (reviewers, theorist, Loop P generators) get fresh
-  context, a packet, and a prompt from prompts/. They return JSON only.
-  Their output goes to failures.jsonl, theories.jsonl, or
-  loop_p_results.jsonl, never into your own context as raw traces.
-- theories.jsonl is append-only and is the project's causal memory:
-  every theory carries status CONFIRMED | FALSIFIED | UNRESOLVED |
-  FALSIFIED-WITH-EVIDENCE. The theorist's packet must include prior
-  theories in the same failure class.
-- eval_set/gallery/ holds frames from autopsied failures with
-  correct-action labels; it grows with every autopsy and is part of
-  every Loop P replay.
-- episodes/ and eval_set/ are append-only and immutable.
-  experiments.log is append-only. Git commits after every experiment
-  and every gate.
+- Follow `docs/superpowers/plans/2026-07-28-langgraph-codex-oauth-subagents.md` until the migration and bounded live vertical slice are complete.
+- Preserve unrelated calibration captures and logs already present in the worktree.
+- Record actual gate evidence in `status/gates.md`; tests or model prose do not prove a live game gate.
 
 ## When blocked
 
-Write status/BLOCKED.md with: what you tried, exact error output,
-what you need from the human. Then stop. Do not improvise around
-input/capture problems by switching libraries silently.
+Write `status/BLOCKED.md` with the exact attempted operation, output, and required external change. A missing live-game capability does not justify restoring an API-backed model path.

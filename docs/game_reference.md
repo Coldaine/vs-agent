@@ -131,3 +131,4 @@ For each frame, label:
   labeler's vibes. A senior-model label pass + a second model's
   audit pass; disagreements go to the human — expected to be a
   handful of frames, not a hundred.
+

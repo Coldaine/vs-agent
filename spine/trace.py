@@ -10,11 +10,40 @@ class EpisodeWriter:
         os.makedirs(os.path.join(self.dir, "frames"), exist_ok=True)
         os.makedirs(os.path.join(self.dir, "keyframes"), exist_ok=True)
         self._states = open(os.path.join(self.dir, "states.jsonl"), "a")
-        self._leader = open(os.path.join(self.dir, "leader.jsonl"), "a")
+        self._planner = open(os.path.join(self.dir, "planner.jsonl"), "a")
+        self._entry = open(os.path.join(self.dir, "entry.jsonl"), "a")
+        self._entry_step = 0
         self.t0 = time.monotonic()
+        self._closed = False
 
     def t(self) -> float:
         return time.monotonic() - self.t0
+
+    def log_menu_turn(self, *, screen_in, ocr_hint="", leader_screen=None,
+                      leader_action=None, leader_click=None,
+                      leader_ready=None, leader_reason=None,
+                      controller_evidence="", steps_left=None):
+        """Log one menu-entry cycle: observe -> leader -> action.
+
+        Called from the goal graph after each observe node and after each
+        menu_action / promote_in_game node.  `leader_*` fields are None on
+        the initial observe (before the first leader turn).
+        """
+        self._entry.write(json.dumps({
+            "step": self._entry_step,
+            "t": round(self.t(), 2),
+            "screen_in": screen_in,
+            "ocr_hint": ocr_hint[:200],
+            "leader_screen": leader_screen,
+            "leader_action": leader_action,
+            "leader_click": leader_click,
+            "leader_ready": leader_ready,
+            "leader_reason": leader_reason,
+            "controller_evidence": controller_evidence,
+            "steps_left": steps_left,
+        }) + "\n")
+        self._entry_step += 1
+        self._entry.flush()
 
     def log_tick(self, hp, level, timer, inventory, threats, gems,
                  rule_fired, latency_ms, action, reflex_override):
@@ -27,11 +56,11 @@ class EpisodeWriter:
         }) + "\n")
         self._states.flush()
 
-    def log_leader(self, options, pick, why, brief_update):
-        self._leader.write(json.dumps({
+    def log_planner(self, options, pick, why, brief_update):
+        self._planner.write(json.dumps({
             "t": round(self.t(), 2), "options": options, "pick": pick,
             "why": why, "brief_update": brief_update}) + "\n")
-        self._leader.flush()
+        self._planner.flush()
 
     def save_frame(self, image_bytes: bytes, keyframe: bool = False, name: str | None = None):
         sub = "keyframes" if keyframe else "frames"
@@ -40,14 +69,50 @@ class EpisodeWriter:
             f.write(image_bytes)
 
     def close(self, survived_s, level, kills, invalid, prompt_hashes: dict):
+        if self._closed:
+            return
+        self._write_outcome(survived_s, level, kills, invalid, prompt_hashes)
+        self._close_streams()
+
+    def abort(self, reason: str) -> None:
+        """Close an interrupted run while preserving an invalid terminal record."""
+        if self._closed:
+            return
+        self._write_outcome(
+            survived_s=round(self.t(), 1),
+            level=None,
+            kills=None,
+            invalid=True,
+            prompt_hashes={},
+            abort_reason=str(reason),
+        )
+        self._close_streams()
+
+    def _write_outcome(
+        self,
+        survived_s,
+        level,
+        kills,
+        invalid,
+        prompt_hashes: dict,
+        abort_reason: str | None = None,
+    ) -> None:
         with open(os.path.join(self.dir, "outcome.json"), "w") as f:
-            json.dump({
+            outcome = {
                 "survived_s": survived_s, "level": level, "kills": kills,
                 "cause_of_death": None,      # filled by review, not runtime
                 "invalid": invalid,
-                "prompt_hashes": prompt_hashes}, f, indent=2)
+                "prompt_hashes": prompt_hashes,
+            }
+            if abort_reason is not None:
+                outcome["abort_reason"] = abort_reason
+            json.dump(outcome, f, indent=2)
+
+    def _close_streams(self) -> None:
         self._states.close()
-        self._leader.close()
+        self._planner.close()
+        self._entry.close()
+        self._closed = True
 
 
 def hash_prompt(path: str) -> str:

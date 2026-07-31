@@ -1,273 +1,323 @@
-"""model_client.py — the ONLY file that calls model endpoints.
+"""Compatibility helpers backed exclusively by the official Codex SDK.
 
-Credentials are injected into the process (normally with ``doppler run``),
-never read from a project-specific Doppler scope or committed ``.env`` file:
-  DEEPSEEK_API_KEY    — direct DeepSeek V4 Flash text/reasoning calls
-  OPENROUTER_API_KEY  — OpenRouter's free vision router
-
-The follower and frame-labeling calls use OpenRouter's ``openrouter/free``
-model because they require image input. The leader and review calls use the
-direct DeepSeek API because they are text-only roles.
+Async callers use the ``acall_*`` surface. Legacy synchronous scripts are
+supported only when no event loop is running; each call owns and closes one SDK
+client. OAuth credential material remains owned by Codex.
 """
 
 from __future__ import annotations
-import base64
+
+import asyncio
 import glob
 import hashlib
 import json
 import os
-import re
 import shutil
+import tempfile
 import time
+from contextlib import contextmanager
+from pathlib import Path
+from typing import Callable
+
+from codex_sdk_client import (
+    FORBIDDEN_API_KEYS,
+    CodexAgentClient,
+    assert_oauth_only_environment,
+)
+
 
 LOG = "model_calls.jsonl"
-
 DIRECTIONS = {"N", "NE", "E", "SE", "S", "SW", "W", "NW", "HOLD"}
-
-# ---------------------------------------------------------------------------
-# endpoint / client resolution
-# ---------------------------------------------------------------------------
-_CLIENTS: dict[str, object] = {}
-
-_DIRECT_DEEPSEEK = {
-    "url": "https://api.deepseek.com",
-    "key_name": "DEEPSEEK_API_KEY",
-    "model": "deepseek-v4-flash",
-}
-_FREE_OPENROUTER_VISION = {
-    "url": "https://openrouter.ai/api/v1",
-    "key_name": "OPENROUTER_API_KEY",
-    "model": "openrouter/free",
-}
+_CLIENT_FACTORY: Callable[[], CodexAgentClient] | None = None
 
 
-def _endpoint(role: str) -> tuple[str, str, str]:
-    """Return the fixed provider endpoint and injected credential for a role."""
-    role = role.upper()
-    provider = (_FREE_OPENROUTER_VISION
-                if role in {"FOLLOWER", "LABELER", "AUDITOR"}
-                else _DIRECT_DEEPSEEK)
-    key = os.environ.get(provider["key_name"])
-    if not key:
-        raise RuntimeError(
-            f"{provider['key_name']} is not injected — launch via Doppler with "
-            "the provider key available in the child process.")
-    model = os.environ.get(f"{role}_MODEL", provider["model"])
-    return provider["url"], key, model
+def set_client_factory_for_testing(
+    factory: Callable[[], CodexAgentClient] | None,
+) -> None:
+    global _CLIENT_FACTORY
+    _CLIENT_FACTORY = factory
 
 
-def _client(role: str):
-    from openai import OpenAI  # lazy so import/config errors surface at call time
-    url, key, model = _endpoint(role)
-    cached = _CLIENTS.get(role)
-    if cached is None:
-        cached = OpenAI(base_url=url, api_key=key)
-        _CLIENTS[role] = cached
-    return cached, model
-
-
-def _log(fn: str, prompt_hash: str, latency_ms: float, ok: bool):
-    with open(LOG, "a") as f:
-        f.write(json.dumps({"fn": fn, "prompt_hash": prompt_hash,
-                            "latency_ms": round(latency_ms, 1),
-                            "ok": ok, "t": time.time()}) + "\n")
+def _new_client() -> CodexAgentClient:
+    return (_CLIENT_FACTORY or CodexAgentClient)()
 
 
 def _hash(text: str) -> str:
     return hashlib.sha256(text.encode()).hexdigest()[:12]
 
 
-# ---------------------------------------------------------------------------
-# image encoding + JSON parsing helpers
-# ---------------------------------------------------------------------------
-def _encode_frame(frame) -> str:
-    """base64 data URL for a Frame (with .image BGR ndarray), a raw
-    ndarray, or a path string."""
-    if isinstance(frame, str):
-        with open(frame, "rb") as f:
-            raw = f.read()
-        return "data:image/jpeg;base64," + base64.b64encode(raw).decode()
+def _log(fn: str, prompt_hash: str, latency_ms: float, ok: bool) -> None:
+    with open(LOG, "a", encoding="utf-8") as stream:
+        stream.write(json.dumps({
+            "fn": fn,
+            "prompt_hash": prompt_hash,
+            "latency_ms": round(latency_ms, 1),
+            "ok": ok,
+            "authentication": "chatgpt-oauth",
+            "model": "codex-sdk-configured",
+            "t": time.time(),
+        }) + "\n")
+
+
+@contextmanager
+def _frame_path(frame):
+    if frame is None:
+        yield None
+        return
+    if isinstance(frame, (str, os.PathLike)):
+        yield Path(frame)
+        return
     image = getattr(frame, "image", frame)
-    import cv2  # lazy: runtime perception dependency
-    ok, buf = cv2.imencode(".jpg", image)
-    if not ok:
-        raise RuntimeError("failed to JPEG-encode frame for model call")
-    return "data:image/jpeg;base64," + base64.b64encode(buf.tobytes()).decode()
+    import cv2
+    with tempfile.TemporaryDirectory(prefix="vs-agent-frame-") as temp_name:
+        path = Path(temp_name, "frame.jpg")
+        if not cv2.imwrite(str(path), image):
+            raise RuntimeError("failed to encode frame for Codex SDK attachment")
+        yield path
 
 
-def _image_content(frame) -> dict:
-    return {"type": "image_url", "image_url": {"url": _encode_frame(frame)}}
-
-
-def _parse_json(text: str) -> dict:
-    """Extract the first JSON object from a response (tolerates ```json
-    fences and leading prose)."""
-    text = (text or "").strip()
-    if text.startswith("```"):
-        text = re.sub(r"^```[a-zA-Z]*", "", text).strip().rstrip("`").strip()
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        m = re.search(r"\{.*\}", text, re.DOTALL)
-        if m:
-            return json.loads(m.group(0))
-        raise
-
-
-def _chat(role: str, messages: list, fn: str, prompt_hash: str,
-           max_tokens: int = 512, temperature: float = 0.0) -> str:
-    client, model = _client(role)
-    t0 = time.monotonic()
+async def _ainvoke(
+    fn: str,
+    role: str,
+    prompt: str,
+    schema: dict,
+    image_path=None,
+) -> dict:
+    started = time.monotonic()
     ok = False
+    client = None
     try:
-        request = {"model": model, "messages": messages, "max_tokens": max_tokens}
-        if role.upper() in {"LEADER", "REVIEWER"}:
-            request["reasoning_effort"] = os.environ.get(
-                "DEEPSEEK_REASONING_EFFORT", "max")
-            request["extra_body"] = {"thinking": {"type": "enabled"}}
-        else:
-            request["temperature"] = temperature
-        resp = client.chat.completions.create(**request)
-        content = resp.choices[0].message.content or ""
+        assert_oauth_only_environment()
+        client = _new_client()
+        await client.start()
+        invocation = await client.invoke(
+            role, prompt, schema, image_path=image_path
+        )
         ok = True
-        return content
+        return invocation.payload
     finally:
-        _log(fn, prompt_hash, (time.monotonic() - t0) * 1000, ok)
+        try:
+            if client is not None:
+                await client.close()
+        finally:
+            _log(fn, _hash(prompt), (time.monotonic() - started) * 1000.0, ok)
 
 
-# ---------------------------------------------------------------------------
-# runtime calls
-# ---------------------------------------------------------------------------
-def call_follower(prompt_text: str, state: dict, frame, brief: str) -> str:
-    """Returns one of: N NE E SE S SW W NW HOLD. Single token.
-    prompt_text contains {{STRATEGY_BRIEF}} and {{STATE_JSON}} slots."""
-    filled = (prompt_text
-              .replace("{{STRATEGY_BRIEF}}", brief or "")
-              .replace("{{STATE_JSON}}",
-                       json.dumps(state, separators=(",", ":"))))
-    messages = [{"role": "user", "content": [
-        {"type": "text", "text": filled},
-        _image_content(frame)]}]
-    content = _chat("FOLLOWER", messages, "call_follower", _hash(filled),
-                    max_tokens=8)
-    token = content.strip().upper().split()[0] if content.strip() else "HOLD"
-    return re.sub(r"[^A-Z]", "", token)  # controller validates + logs vocab
+def _run_sync(async_name: str, operation: Callable[[], object]):
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(operation())
+    raise RuntimeError(
+        f"synchronous model helper cannot run inside an event loop; await {async_name}"
+    )
+
+
+FOLLOWER_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "direction": {"type": "string", "enum": sorted(DIRECTIONS)},
+        "speed": {"type": "number", "minimum": 0, "maximum": 1},
+        "reason": {"type": "string"},
+    },
+    "required": ["direction", "speed", "reason"],
+    "additionalProperties": False,
+}
+
+
+async def acall_follower(
+    prompt_text: str, state: dict, frame, brief: str
+) -> tuple[str, float]:
+    filled = (
+        prompt_text.replace("{{STRATEGY_BRIEF}}", brief or "")
+        .replace("{{STATE_JSON}}", json.dumps(state, separators=(",", ":")))
+    )
+    with _frame_path(frame) as image_path:
+        result = await _ainvoke(
+            "call_follower", "follower", filled, FOLLOWER_SCHEMA, image_path
+        )
+    direction = str(result.get("direction", "HOLD")).upper()
+    if direction not in DIRECTIONS:
+        direction = "HOLD"
+    speed = max(0.0, min(1.0, float(result.get("speed", 1.0))))
+    return direction, speed
+
+
+def call_follower(prompt_text: str, state: dict, frame, brief: str) -> tuple[str, float]:
+    return _run_sync(
+        "acall_follower",
+        lambda: acall_follower(prompt_text, state, frame, brief),
+    )
+
+
+FOLLOWER_EVAL_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "action": {"type": "string", "enum": sorted(DIRECTIONS)},
+        "threat_octant": {"type": "string"},
+        "gem_octant": {"type": "string"},
+        "is_level_up": {"type": "boolean"},
+    },
+    "required": ["action", "threat_octant", "gem_octant", "is_level_up"],
+    "additionalProperties": False,
+}
+
+
+async def acall_follower_eval(prompt_text: str, frame_path: str) -> dict:
+    prompt = prompt_text + "\nReturn the requested evaluation object."
+    return await _ainvoke(
+        "call_follower_eval", "follower", prompt, FOLLOWER_EVAL_SCHEMA, Path(frame_path)
+    )
 
 
 def call_follower_eval(prompt_text: str, frame_path: str) -> dict:
-    """Loop P variant: returns {"action": ..., "threat_octant": ...,
-    "gem_octant": ..., "is_level_up": ...} for scoring."""
-    suffix = ("\n\nFor evaluation, reply ONLY with JSON: "
-              '{"action": "<N|NE|E|SE|S|SW|W|NW|HOLD>", '
-              '"threat_octant": "<octant>", "gem_octant": "<octant>", '
-              '"is_level_up": <true|false>}')
-    filled = (prompt_text
-              .replace("{{STRATEGY_BRIEF}}", "")
-              .replace("{{STATE_JSON}}", "(offline eval — image only)")) + suffix
-    messages = [{"role": "user", "content": [
-        {"type": "text", "text": filled},
-        _image_content(frame_path)]}]
-    content = _chat("FOLLOWER", messages, "call_follower_eval",
-                    _hash(filled), max_tokens=128)
-    try:
-        out = _parse_json(content)
-    except Exception:
-        tok = re.sub(r"[^A-Z]", "", content.strip().upper().split()[0]) \
-            if content.strip() else "HOLD"
-        out = {"action": tok}
-    out.setdefault("action", "HOLD")
-    out["action"] = str(out["action"]).upper()
-    return out
+    return _run_sync(
+        "acall_follower_eval", lambda: acall_follower_eval(prompt_text, frame_path)
+    )
+
+
+LEADER_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "pick": {"type": "integer", "minimum": 1},
+        "why": {"type": "string"},
+        "brief_update": {"type": "string"},
+    },
+    "required": ["pick", "why", "brief_update"],
+    "additionalProperties": False,
+}
+
+
+async def acall_leader(
+    prompt_text: str, frame, options: list[str], brief: str
+) -> dict:
+    prompt = (
+        f"{prompt_text}\n\nCurrent strategy brief:\n{brief}\n\n"
+        f"Level-up options, top to bottom: {json.dumps(options)}\n"
+        "Pick a one-based option index."
+    )
+    with _frame_path(frame) as image_path:
+        result = await _ainvoke(
+            "call_leader", "leader", prompt, LEADER_SCHEMA, image_path
+        )
+    return {
+        "pick": result.get("pick", 1),
+        "why": result.get("why", ""),
+        "brief_update": result.get("brief_update", brief),
+    }
 
 
 def call_leader(prompt_text: str, frame, options: list[str], brief: str) -> dict:
-    """Returns {"pick": str, "why": str, "brief_update": str}."""
-    user = (f"Current strategy brief:\n{brief}\n\n"
-            f"Level-up options (top to bottom): {json.dumps(options)}\n"
-            "Reply in JSON only as specified.")
-    # DeepSeek V4 Flash is deliberately used as a text-only strategic model.
-    # OCR has already supplied the level-up options, so a frame is unnecessary.
-    messages = [{"role": "user", "content": prompt_text + "\n\n" + user}]
-    content = _chat("LEADER", messages, "call_leader",
-                    _hash(prompt_text + user), max_tokens=400)
-    out = _parse_json(content)
-    return {"pick": out.get("pick", options[0] if options else ""),
-            "why": out.get("why", ""),
-            "brief_update": out.get("brief_update", brief)}
+    return _run_sync(
+        "acall_leader",
+        lambda: acall_leader(prompt_text, frame, options, brief),
+    )
+
+
+SUBAGENT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": True,
+}
+
+
+async def acall_subagent(prompt_text: str, packet: dict, keyframes=None) -> dict:
+    prompt = (
+        prompt_text
+        + "\n\nPACKET:\n"
+        + json.dumps(packet, default=str)
+        + "\nReturn one valid JSON object and no surrounding prose."
+    )
+    image_path = Path(keyframes[0]) if keyframes else None
+    return await _ainvoke(
+        "call_subagent", "leader", prompt, SUBAGENT_SCHEMA, image_path
+    )
 
 
 def call_subagent(prompt_text: str, packet: dict, keyframes=None) -> dict:
-    """Fresh-context sub-agent call. Returns parsed JSON. Must retry
-    once with 'return valid JSON only' if parsing fails, then raise."""
-    payload = prompt_text + "\n\nPACKET:\n" + json.dumps(packet, default=str)
-    # Reviewers use direct DeepSeek text reasoning. Frame observations are
-    # captured in the packet rather than sending unsupported image content.
-    messages = [{"role": "user", "content": payload}]
-    phash = _hash(payload)
-    content = _chat("REVIEWER", messages, "call_subagent", phash,
-                    max_tokens=1500)
-    try:
-        return _parse_json(content)
-    except Exception:
-        messages.append({"role": "assistant", "content": content})
-        messages.append({"role": "user", "content": "Return valid JSON only."})
-        content = _chat("REVIEWER", messages, "call_subagent", phash,
-                        max_tokens=1500)
-        return _parse_json(content)
+    return _run_sync(
+        "acall_subagent",
+        lambda: acall_subagent(prompt_text, packet, keyframes),
+    )
+
+
+LABEL_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "threat_octant": {"type": "string"},
+        "gem_octant": {"type": "string"},
+        "is_level_up": {"type": "boolean"},
+        "correct_action": {"type": "string", "enum": sorted(DIRECTIONS)},
+    },
+    "required": ["threat_octant", "gem_octant", "is_level_up", "correct_action"],
+    "additionalProperties": False,
+}
+
+
+async def acall_labeler(frame_path: str, rubric_pointer: str) -> dict:
+    return await _ainvoke(
+        "call_labeler", "leader", rubric_pointer, LABEL_SCHEMA, Path(frame_path)
+    )
 
 
 def call_labeler(frame_path: str, rubric_pointer: str) -> dict:
-    messages = [{"role": "user", "content": [
-        {"type": "text", "text": rubric_pointer},
-        _image_content(frame_path)]}]
-    content = _chat("LABELER", messages, "call_labeler",
-                    _hash(rubric_pointer + frame_path), max_tokens=400)
-    return _parse_json(content)
+    return _run_sync(
+        "acall_labeler", lambda: acall_labeler(frame_path, rubric_pointer)
+    )
+
+
+AUDIT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "agrees": {"type": "boolean"},
+        "corrections": {"type": "string"},
+    },
+    "required": ["agrees", "corrections"],
+    "additionalProperties": False,
+}
+
+
+async def acall_auditor(
+    frame_path: str, rubric_pointer: str, primary: dict
+) -> dict:
+    prompt = rubric_pointer + "\n\nPRIMARY LABEL TO AUDIT:\n" + json.dumps(primary)
+    return await _ainvoke(
+        "call_auditor", "leader", prompt, AUDIT_SCHEMA, Path(frame_path)
+    )
 
 
 def call_auditor(frame_path: str, rubric_pointer: str, primary: dict) -> dict:
-    """Second-opinion pass. Returns {"agrees": bool, "corrections": ...}."""
-    user = (rubric_pointer + "\n\nPRIMARY LABEL TO AUDIT:\n"
-            + json.dumps(primary))
-    messages = [{"role": "user", "content": [
-        {"type": "text", "text": user},
-        _image_content(frame_path)]}]
-    content = _chat("AUDITOR", messages, "call_auditor",
-                    _hash(user), max_tokens=400)
-    out = _parse_json(content)
-    out.setdefault("agrees", True)
-    return out
+    return _run_sync(
+        "acall_auditor",
+        lambda: acall_auditor(frame_path, rubric_pointer, primary),
+    )
 
 
-def export_gallery_frames(run_dir: str, error: dict, out_dir: str):
-    """Copy the failure-window frames + correct-action labels from an
-    autopsy follower_error into the gallery (trace_spec.md)."""
+def export_gallery_frames(run_dir: str, error: dict, out_dir: str) -> None:
     os.makedirs(out_dir, exist_ok=True)
     labels_path = os.path.join(out_dir, "labels.json")
     labels = json.load(open(labels_path)) if os.path.exists(labels_path) else []
-
     frames = error.get("frames")
     if not frames:
-        t = error.get("t") or error.get("irreversible_at_s")
-        if t is not None:
-            idx = int(float(t) * 2)  # 2fps naming (trace_spec)
-            frames = sorted(
-                glob.glob(os.path.join(run_dir, "frames", f"{idx:07d}.jpg")))
-    for src in (frames or []):
-        src_path = src if os.path.exists(src) \
-            else os.path.join(run_dir, "frames", os.path.basename(src))
-        if not os.path.exists(src_path):
+        at = error.get("t") or error.get("irreversible_at_s")
+        if at is not None:
+            index = int(float(at) * 2)
+            frames = sorted(glob.glob(os.path.join(run_dir, "frames", f"{index:07d}.jpg")))
+    for source in frames or []:
+        source_path = source if os.path.exists(source) else os.path.join(
+            run_dir, "frames", os.path.basename(source)
+        )
+        if not os.path.exists(source_path):
             continue
-        base = f"{os.path.basename(run_dir)}_{os.path.basename(src_path)}"
-        dst = os.path.join(out_dir, base)
-        shutil.copyfile(src_path, dst)
+        base = f"{os.path.basename(run_dir)}_{os.path.basename(source_path)}"
+        destination = os.path.join(out_dir, base)
+        shutil.copyfile(source_path, destination)
         labels.append({
-            "frame": dst,
+            "frame": destination,
             "correct_action": error.get("correct_action"),
-            "threat_octant": error.get("threat_octant")
-            or error.get("threat_vector_at_t"),
+            "threat_octant": error.get("threat_octant") or error.get("threat_vector_at_t"),
             "gem_octant": error.get("gem_octant"),
             "is_level_up": False,
             "source_run": run_dir,
         })
-    json.dump(labels, open(labels_path, "w"), indent=2)
+    with open(labels_path, "w", encoding="utf-8") as stream:
+        json.dump(labels, stream, indent=2)

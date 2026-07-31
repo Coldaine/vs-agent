@@ -2,7 +2,7 @@
 todos:
   - id: confirm-host
     status: completed
-    content: Confirm game host on the RTX 5090 machine (windowed Steam) and OpenAI-compatible leader endpoint
+    content: Confirm game host on the RTX 5090 machine (windowed Steam) and OpenAI-compatible planner endpoint
   - id: sam-perception
     status: completed
     content: Wire local SAM 3.1 concept segmentation to enemy/player (and optional gem) masks; benchmark FPS on 5090
@@ -18,17 +18,17 @@ todos:
   - id: scaffold-harness
     status: completed
     content: Scaffold capture → mode detect → SAM → active mover → input inject → trace writer
-  - id: wire-leader
+  - id: wire-planner
     status: completed
-    content: 'Wire event-driven leader for level-up/chest + slow intent packets (mode, attractors, build plan)'
+    content: 'Wire event-driven planner for level-up/chest + slow intent packets (mode, attractors, build plan)'
   - id: trace-critique
     status: completed
     content: 'Define trace schema including approach_id, masks, commit/breakout events, outcomes'
 name: VS Agent Harness
-overview: 'Live Vampire Survivors harness with local SAM 3.1 threat-union perception, a pluggable movement stack (multiple routing/control approaches under A/B test—we do not assume one optimum), a slow OpenAI-compatible strategy leader, and traces that score which approach survives.'
+overview: 'Live Vampire Survivors harness with local SAM 3.1 threat-union perception, a pluggable movement stack (multiple routing/control approaches under A/B test—we do not assume one optimum), a slow OpenAI-compatible strategy planner, and traces that score which approach survives.'
 isProject: false
 ---
-# Vampire Survivors Leader–Follower Agent Harness
+# Vampire Survivors planner–pilot Agent Harness
 
 ## What Vampire Survivors actually is (for agents)
 
@@ -38,9 +38,9 @@ That splits cleanly into three control problems:
 
 | Timescale | Game task | Agent job |
 |---|---|---|
-| Very fast (math / input rate) | Hold a steering direction | Curve follower → WASD |
+| Very fast (math / input rate) | Hold a steering direction | Curve pilot → WASD |
 | Fast perception (local GPU) | Where are threats / me / maybe gems | SAM 3.1 masks → costmap |
-| Discrete / paused | Level-up, chests, Arcana, evolve plan | Slow leader LLM → choice + intent |
+| Discrete / paused | Level-up, chests, Arcana, evolve plan | Slow planner LLM → choice + intent |
 | Episodic | Whole run quality | Traces for later improvement |
 
 You do **not** need aim or attack buttons. Moment-to-moment survival is mostly **geometry under clutter**; builds are **paused discrete decisions**.
@@ -71,7 +71,7 @@ Shared spine:
 1. **SAM** → enemy **union** mask (+ player); **no track IDs**  
 2. **Active mover plugin** → proposed heading (from free-space route, sectors, potential field, or slow VLM, etc.)  
 3. **Shared commit / breakout wrapper** (optional per trial) → sticky WASD, momentum, power-through when boxed  
-4. **Leader** → builds + intent bias for whichever mover is active  
+4. **planner** → builds + intent bias for whichever mover is active  
 
 ```mermaid
 flowchart LR
@@ -113,7 +113,7 @@ flowchart LR
 All expose the same interface: `propose(perception, intent, state) -> heading (+ debug)`.
 
 1. **`free_space_corridor`** (strong prior, not crowned)  
-   Carve free space from dilated threat; distance transform; short-horizon route along fat corridors; goals from leader intent.
+   Carve free space from dilated threat; distance transform; short-horizon route along fat corridors; goals from planner intent.
 
 2. **`sector_density`**  
    Polar histogram of threat in N sectors; pick lowest-cost sector with clearance / gem / orbit terms. Cheaper, more myopic.
@@ -125,7 +125,7 @@ All expose the same interface: `propose(perception, intent, state) -> heading (+
    OpenAI-compatible small VLM ~2 Hz proposing 8-way move from frames + intent. Likely slower/weaker for pure dodge; keep as control / hybrid (VLM only sets bias).
 
 5. **Hybrids** (second wave)  
-   e.g. free-space route for survival + VLM/leader bias for farming; or sector proposal with free-space veto.
+   e.g. free-space route for survival + VLM/planner bias for farming; or sector proposal with free-space veto.
 
 ```mermaid
 flowchart TB
@@ -175,12 +175,12 @@ flowchart TB
   Open -->|no_escape| Break --> Hold
 ```
 
-### Slow leader (OpenAI-compatible)
+### Slow planner (OpenAI-compatible)
 
 - Level-up / chest / Arcana when UI pauses; periodic intent refresh.
 - Intent feeds the **active mover**:
   - `mode`, `attractors`, `orbit`, `build_plan`, `levelup_policy`.
-- Leader never micromanages WASD.
+- planner never micromanages WASD.
 
 ---
 
@@ -192,7 +192,7 @@ This is still **live attach → sense → act → record**, not “train a Gym p
 2. Capture framebuffer with timestamps.
 3. Mode detect: `playing | levelup | chest | pause | dead | title`.
 4. If playing: SAM masks → costmap → curve → keys; log everything.
-5. If paused UI: leader chooses; inject menu keys; update intent.
+5. If paused UI: planner chooses; inject menu keys; update intent.
 6. On death / 30:00: archive run trace; critique / prompt / few-shot improve; relaunch.
 
 “Train” = expose traces of play (frames, masks, costmaps, actions, intents, outcomes) and improve the stack from that tape.
@@ -203,7 +203,7 @@ sequenceDiagram
   participant Cap as Capture
   participant SAM as SAM3_1
   participant Plan as Planner
-  participant Leader as Leader
+  participant planner as planner
   participant Inp as Inputs
   participant Trace as Traces
 
@@ -218,11 +218,11 @@ sequenceDiagram
     Plan->>Trace: free_space_mode_heading
   end
 
-  Note over Game,Leader: LevelUp_or_Chest_pauses_game
-  Cap->>Leader: UI_frames_inventory
-  Leader->>Plan: new_intent_packet
-  Leader->>Inp: menu_keys
-  Leader->>Trace: decision
+  Note over Game,planner: LevelUp_or_Chest_pauses_game
+  Cap->>planner: UI_frames_inventory
+  planner->>Plan: new_intent_packet
+  planner->>Inp: menu_keys
+  planner->>Trace: decision
 ```
 
 ---
@@ -266,7 +266,7 @@ flowchart TB
 4. **Mover plugin interface** + first two implementations (`free_space_corridor`, `sector_density`); debug overlay.
 5. **Commit/breakout wrapper** as toggleable layer; same overlay shows commit state.
 6. **Input bridge**: Held WASD + menu keys + kill-switch.
-7. **Leader**: OpenAI-compatible endpoint for paused decisions + intent packets.
+7. **planner**: OpenAI-compatible endpoint for paused decisions + intent packets.
 8. **Bakeoff harness**: run configs by `approach_id`; aggregate survive-time / entropy / breakouts.
 9. **Add** `potential_field` and `fast_vlm` once the spine is stable; iterate winners without deleting losers.
 10. **Improve**: tune from traces; optional SAM fine-tune if masks are the bottleneck.
@@ -277,12 +277,12 @@ flowchart TB
 
 1. **Concept vocabulary mismatch** — zero-shot SAM may miss VS sprites; exemplars / fine-tune.
 2. **Union mask quality under FX** — fake walls/holes hurt free-space and breakout geometry for every mover that uses the mask.
-3. **Confounded bakeoffs** — different builds/luck swamp mover differences; need many runs + log leader choices / luck proxies.
+3. **Confounded bakeoffs** — different builds/luck swamp mover differences; need many runs + log planner choices / luck proxies.
 4. **Gems vs monsters** — attractor weight is itself a hyperparam under test.
 5. **Player localization / stale masks / map edges** — shared perception bugs punish all approaches equally (fix early).
 6. **Commit vs adaptability** — wrapper may help one mover and hurt another; always test wrapper on/off.
 7. **Breakout wall choice** — thickness × clearance-beyond × edge penalty; tune from traces.
-8. **Mode detection / leader builds** — still load-bearing outside the mover bakeoff.
+8. **Mode detection / planner builds** — still load-bearing outside the mover bakeoff.
 9. **GPU + trace bulk** — tag every episode with `approach_id`; store RLE masks + headings, not IDs.
 
 ---
@@ -293,7 +293,7 @@ flowchart TB
 - **First bakeoff slate**: `free_space_corridor` vs `sector_density`, each × wrapper `{off, on}`.
 - **Wrapper priors to try** (not frozen): `T_commit` ~150–300 ms route, longer breakout; no gems in breakout.
 - **Then add**: `potential_field`, `fast_vlm` (control/hybrid).
-- **Leader**: OpenAI-compatible model on pause + ~15 s intent refresh.
+- **planner**: OpenAI-compatible model on pause + ~15 s intent refresh.
 - **Traces always carry `approach_id`** so winners are empirical.
 
 ---
@@ -302,6 +302,7 @@ flowchart TB
 
 - Not: one true routing algorithm.
 - Not: track IDs.
-- Not: leader issuing WASD every tick.
+- Not: planner issuing WASD every tick.
 - Not: that commit/breakout always helps (wrapper is under test).
-- Yes: **shared SAM threat-union spine + multiple movers under experiment + slow leader + traces that pick winners empirically**.
+- Yes: **shared SAM threat-union spine + multiple movers under experiment + slow planner + traces that pick winners empirically**.
+

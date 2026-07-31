@@ -48,9 +48,13 @@ def assemble_packet(run_dir: str) -> dict:
             ft = json.loads(l).get("dominant_failure_type")
             if ft:
                 histogram[ft] = histogram.get(ft, 0) + 1
+    prompts = {
+        "follower": open("prompts/follower.md", encoding="utf-8").read(),
+        "leader": open("prompts/leader.md", encoding="utf-8").read(),
+    }
     return {"states": packet_states, "keyframes": keyframes,
             "outcome": outcome, "histogram": histogram,
-            "directive": generate_directive(states)}
+            "directive": generate_directive(states), "prompts": prompts}
 
 
 def review_run(run_dir: str):
@@ -61,8 +65,11 @@ def review_run(run_dir: str):
 
     autopsy = model_client.call_subagent(
         autopsy_prompt, packet, keyframes=packet["keyframes"])
-    leader_log = [json.loads(l) for l in open(os.path.join(run_dir, "leader.jsonl"))] \
-        if os.path.exists(os.path.join(run_dir, "leader.jsonl")) else []
+    leader_path = os.path.join(run_dir, "leader.jsonl")
+    if not os.path.exists(leader_path):
+        leader_path = os.path.join(run_dir, "planner.jsonl")
+    leader_log = [json.loads(l) for l in open(leader_path)] \
+        if os.path.exists(leader_path) else []
     build = model_client.call_subagent(
         build_prompt, {"leader_log": leader_log, "outcome": packet["outcome"]})
 
