@@ -6,7 +6,7 @@
 
 **Goal:** Replace the bespoke model-orchestration loop with a durable LangGraph goal runtime whose leader and follower both run as `gpt-5.6-luna` through the user's existing ChatGPT Pro OAuth login in the local Codex CLI.
 
-**Architecture:** LangGraph owns goal state, phase transitions, checkpoints, leader/follower invocation, and completion evaluation. Existing `spine` modules remain the deterministic game boundary. A narrow subprocess adapter invokes `codex exec` with `--ignore-user-config`, `--ignore-rules`, `--ephemeral`, `--sandbox read-only`, and `--model gpt-5.6-luna`; Codex reads its existing ChatGPT OAuth session from `CODEX_HOME`, while the repository never reads, copies, logs, or stores OAuth credentials.
+**Architecture:** LangGraph owns goal state, phase transitions, checkpoints, leader/follower invocation, and completion evaluation. Existing `spine` modules remain the deterministic game boundary. Instead of the older subprocess wrapper invoking `codex exec`, the runtime now directly uses the official `openai-codex` SDK to interact with the Codex app-server, while the repository never reads, copies, logs, or stores OAuth credentials. Both leader and follower child subgraphs are compiled separately on disjoint schemas and run transparently on individual role thread bindings.
 
 **Tech Stack:** Python 3.11+, LangGraph, SQLite checkpointing, Codex CLI 0.145.0+, ChatGPT Pro OAuth, `gpt-5.6-luna`, existing YOLO/OCR/controller stack.
 
