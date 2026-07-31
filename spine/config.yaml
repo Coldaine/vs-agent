@@ -19,10 +19,22 @@ game_process_hint: "VampireSurvivors"
 window_title_hint: "Vampire Survivors"
 steam_app_id: "1794680"
 capture_backend: wgc
+input_backend: keyboard
+gamepad_ready_timeout_s: 3.0
+gamepad_create_retries: 3
+gamepad_recreate_on_error: true
+gamepad_button_hold_s: 0.3
+# This save starts on Gennaro (row 2, col 1); Antonio is row 1, col 2.
+antonio_selection_path: [up, right]
+# WGC frame coordinates on the physical left monitor (origin -2560, 0).
+wgc_monitor_origin: [-2560, 0]
 # DXCam output zero is the primary display. This game window runs on output 1.
 capture_output_idx: 1
 capture_min_dimensions: [640, 480]
+capture_retries: 3
+movement_diff_threshold: 0.1
 tesseract_cmd: "C:/Program Files/Tesseract-OCR/tesseract.exe"
+menu_ocr_config: "--psm 6"
 
 # detector (PROVISIONING — see status/HUMAN_NEEDED.md)
 # Upstream monster_class.pt detects threats only; it does not label gems/elites.

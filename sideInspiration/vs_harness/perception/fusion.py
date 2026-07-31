@@ -44,3 +44,7 @@ class FusionPerception(PerceptionBackend):
                 "prior": b.backend,
             },
         )
+
+    def close(self) -> None:
+        self.primary.close()
+        self.prior.close()

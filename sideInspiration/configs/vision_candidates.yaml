@@ -10,7 +10,8 @@ candidates:
     package: facebookresearch/sam3
     notes: >
       Promptable concept masks; union threat field (no track IDs). Best quality free-space carve.
-      Image PCS ~30ms @100+ objs on H200-class; video multiplex helps tracking but we discard IDs.
+      Run via sideInspiration/sam3_service Docker (image PCS, facebook sam3 checkpoint).
+      SAM 3.1 multiplex is the video tracker, not the default for per-frame threat unions.
     latency_tier: mid   # tens of ms
     harness_backend: sam3
     priority: 1

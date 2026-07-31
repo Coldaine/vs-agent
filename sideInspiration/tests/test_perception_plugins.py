@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from vs_harness.perception.boxes import boxes_to_mask
 from vs_harness.perception.factory import PERCEPTION_BACKENDS, build_perception
@@ -40,3 +41,128 @@ def test_vision_candidates_registry():
     assert any(c["id"] == "yolo_world" for c in perc)
     movers = summarize("fast_mover")
     assert any("smolvlm" in c["id"] for c in movers)
+
+
+def test_sam3_http_client_parses_masks(monkeypatch):
+    """Unit-test the HTTP client without a live GPU container."""
+    import base64
+
+    import cv2
+
+    from vs_harness.perception.sam3 import Sam3HttpPerception
+
+    frame = np.zeros((40, 60, 3), dtype=np.uint8)
+    threat = np.zeros((40, 60), dtype=np.uint8)
+    threat[10:20, 15:25] = 255
+    ok, buf = cv2.imencode(".png", threat)
+    assert ok
+    png_b64 = base64.b64encode(buf.tobytes()).decode("ascii")
+
+    class _Resp:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "width": 60,
+                "height": 40,
+                "union_png_b64": png_b64,
+                "per_prompt_png_b64": {"enemy": png_b64, "monster": png_b64},
+                "prompt_counts": {"enemy": 1, "monster": 1},
+                "checkpoint_hint": "facebook/sam3",
+                "inference_ms": 1.0,
+            }
+
+    class _Client:
+        def post(self, url, json=None):  # noqa: A002
+            assert url.endswith("/v1/segment")
+            assert "enemy" in json["prompts"]
+            return _Resp()
+
+        def close(self):
+            return None
+
+    perc = Sam3HttpPerception(
+        base_url="http://test",
+        enemy_prompts=["enemy", "monster"],
+        gem_prompts=[],
+        player_prompts=[],
+    )
+    monkeypatch.setattr(perc, "_client", _Client())
+    out = perc.infer(frame, 0.0)
+    assert out.threat_union[12, 18]
+    assert out.meta["transport"] == "http"
+    assert out.backend == "sam3"
+
+
+def test_sam3_server_validates_segment_inputs():
+    pytest.importorskip("fastapi")
+
+    from fastapi import HTTPException
+    from pydantic import ValidationError
+
+    from sideInspiration.sam3_service.server import SegmentRequest, _decode_image
+
+    with pytest.raises(ValidationError):
+        SegmentRequest(image_b64="x", prompts=["enemy"], downsample_max_side=0)
+    with pytest.raises(HTTPException) as error:
+        _decode_image("not-base64")
+    assert error.value.status_code == 400
+
+
+def test_try_build_sam_retries_after_load_error(monkeypatch):
+    import httpx
+
+    from vs_harness.perception.sam3 import try_build_sam
+
+    health_calls = 0
+    timeouts = []
+
+    class _Response:
+        def __init__(self, payload):
+            self._payload = payload
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return self._payload
+
+    class _Client:
+        def __init__(self, timeout):
+            timeouts.append(timeout)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def get(self, url):
+            nonlocal health_calls
+            assert url.endswith("/health")
+            health_calls += 1
+            if health_calls == 1:
+                return _Response({"ready": False, "model_loaded": False, "load_error": "transient"})
+            return _Response({"ready": True, "model_loaded": True, "load_error": None})
+
+        def post(self, url):
+            assert url.endswith("/v1/warmup")
+            return _Response({"ok": True, "model_loaded": True})
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(httpx, "Client", _Client)
+    backend = try_build_sam(
+        {
+            "perception": {
+                "sam3_url": "http://test",
+                "sam3_warmup_timeout_s": 17,
+            }
+        }
+    )
+
+    assert backend is not None
+    assert health_calls == 2
+    assert timeouts[:2] == [2.0, 17.0]

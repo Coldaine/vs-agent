@@ -2,7 +2,7 @@
 
 Every episode writes exactly this structure. Append-only, immutable.
 
-```
+```text
 episodes/run_<n>/
   frames/            2fps JPEG capture, zero-padded: 000001.jpg
   states.jsonl       one line per tick:
@@ -57,7 +57,7 @@ episodes/run_<n>/
 One line per theory:
 {"id": 14, "failure_class": "...", "causal_claim": "...",
  "intervention": {...}, "prediction": {...}, "confidence": "...",
- "status": "PROPOSED"}
+ "status": "UNRESOLVED"}
 Status changes are APPENDED as new lines, never edited in place:
 {"id": 14, "status_update": "CONFIRMED", "evidence": "exp/22-24",
  "t": "2026-07-25"}

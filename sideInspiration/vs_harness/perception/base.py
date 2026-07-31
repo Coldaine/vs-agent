@@ -13,3 +13,7 @@ class PerceptionBackend(ABC):
     @abstractmethod
     def infer(self, frame_bgr: np.ndarray, timestamp_s: float) -> PerceptionFrame:
         raise NotImplementedError
+
+    def close(self) -> None:
+        """Release optional resources owned by the backend."""
+        return None
