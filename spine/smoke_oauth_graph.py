@@ -111,8 +111,8 @@ def validate_smoke_result(result: dict) -> dict:
         if result.get("status") != "achieved":
             raise ValueError("smoke did not achieve its no-game goal")
         account = result["account"]
-        if account.get("type") != "chatgpt" or not account.get("plan_type"):
-            raise ValueError("public account metadata must prove ChatGPT authentication")
+        if account.get("type") != "chatgpt" or account.get("plan_type") != "pro":
+            raise ValueError("public account metadata must prove ChatGPT Pro authentication")
         model = result["model"]
         if (
             model.get("configured") != CONFIGURED_MODEL

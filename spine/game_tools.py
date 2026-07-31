@@ -168,11 +168,22 @@ class SpineGameTools:
         self._require_active_run()
         action_key = str(action or "").lower()
         try:
-            if click is not None:
+            if click is not None and action_key != "click":
+                raise ValueError("click coordinates require action='click'")
+            if action_key == "click":
+                if click is None:
+                    raise ValueError("action='click' requires [x, y] coordinates")
                 if len(click) != 2:
                     raise ValueError("click must be [x, y] frame coordinates")
-                self.io.click_frame(int(click[0]), int(click[1]))
-                evidence = f"menu:click:{int(click[0])},{int(click[1])}"
+                frame = self.io.screenshot()
+                x, y = int(click[0]), int(click[1])
+                if not (0 <= x < frame.width and 0 <= y < frame.height):
+                    raise ValueError(
+                        f"click [{x}, {y}] is outside captured frame "
+                        f"{frame.width}x{frame.height}"
+                    )
+                self.io.click_frame(x, y)
+                evidence = f"menu:click:{x},{y}"
             elif action_key in MENU_ACTIONS:
                 self.io.menu_navigate(action_key)
                 evidence = f"menu:{action_key}"
@@ -234,7 +245,17 @@ class SpineGameTools:
         self._require_active_run()
         if not self.last_options:
             raise RuntimeError("no observed level-up options are available")
-        self.launch.select_option(self.io, option, self.last_options)
+        if isinstance(option, bool) or not 1 <= option <= len(self.last_options):
+            self.neutralize()
+            raise ValueError(
+                f"level-up option must be between 1 and {len(self.last_options)}, "
+                f"got {option!r}"
+            )
+        try:
+            self.launch.select_option(self.io, option, self.last_options)
+        except Exception:
+            self.neutralize()
+            raise
         self.writer.log_planner(
             self.last_options,
             option,

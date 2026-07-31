@@ -17,33 +17,18 @@ import tempfile
 import time
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Callable, Mapping
+from typing import Callable
 
-from codex_sdk_client import CodexAgentClient
+from codex_sdk_client import (
+    FORBIDDEN_API_KEYS,
+    CodexAgentClient,
+    assert_oauth_only_environment,
+)
 
 
 LOG = "model_calls.jsonl"
 DIRECTIONS = {"N", "NE", "E", "SE", "S", "SW", "W", "NW", "HOLD"}
-FORBIDDEN_API_KEYS = (
-    "OPENAI_API_KEY",
-    "OPENROUTER_API_KEY",
-    "DEEPSEEK_API_KEY",
-)
 _CLIENT_FACTORY: Callable[[], CodexAgentClient] | None = None
-
-
-def assert_oauth_only_environment(
-    environ: Mapping[str, str] | None = None,
-) -> None:
-    """Fail closed if an API-backed model path could be selected accidentally."""
-
-    values = os.environ if environ is None else environ
-    present = [name for name in FORBIDDEN_API_KEYS if values.get(name)]
-    if present:
-        raise RuntimeError(
-            "ChatGPT Pro OAuth only: remove API-key variables from the "
-            f"model process ({', '.join(present)})"
-        )
 
 
 def set_client_factory_for_testing(
@@ -211,7 +196,10 @@ async def acall_leader(
         f"Level-up options, top to bottom: {json.dumps(options)}\n"
         "Pick a one-based option index."
     )
-    result = await _ainvoke("call_leader", "leader", prompt, LEADER_SCHEMA)
+    with _frame_path(frame) as image_path:
+        result = await _ainvoke(
+            "call_leader", "leader", prompt, LEADER_SCHEMA, image_path
+        )
     return {
         "pick": result.get("pick", 1),
         "why": result.get("why", ""),

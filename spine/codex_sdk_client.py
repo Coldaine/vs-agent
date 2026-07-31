@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -25,6 +26,11 @@ _RESTRICTED_CONFIG = {
     "features": {"shell_tool": False},
 }
 DEFAULT_MODEL = "gpt-5.6-luna"
+FORBIDDEN_API_KEYS = (
+    "OPENAI_API_KEY",
+    "OPENROUTER_API_KEY",
+    "DEEPSEEK_API_KEY",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,6 +94,7 @@ class CodexAgentClient:
                 return
             if self._closed:
                 raise RuntimeError("Codex SDK client is closed")
+            assert_oauth_only_environment()
 
             context = self._sdk_factory()
             sdk = await context.__aenter__()
@@ -200,19 +207,40 @@ class CodexAgentClient:
 
 
 def _is_chatgpt_managed_account(metadata: Any) -> bool:
-    """Accept only the SDK's public ChatGPT account representation."""
+    """Accept only the SDK's public ChatGPT Pro account representation."""
 
     account = _field(metadata, "account")
     profile = _field(account, "root") if account is not None else None
     if profile is None:
         profile = account
-    return _field(profile, "type") == "chatgpt"
+    return (
+        _enum_value(_field(profile, "type")) == "chatgpt"
+        and _enum_value(_field(profile, "plan_type")) == "pro"
+    )
+
+
+def assert_oauth_only_environment(
+    environ: Mapping[str, str] | None = None,
+) -> None:
+    """Fail closed if an API-backed model path could be selected accidentally."""
+
+    values = os.environ if environ is None else environ
+    present = [name for name in FORBIDDEN_API_KEYS if values.get(name)]
+    if present:
+        raise RuntimeError(
+            "ChatGPT Pro OAuth only: remove API-key variables from the "
+            f"model process ({', '.join(present)})"
+        )
 
 
 def _field(value: Any, name: str) -> Any:
     if isinstance(value, Mapping):
         return value.get(name)
     return getattr(value, name, None)
+
+
+def _enum_value(value: Any) -> Any:
+    return getattr(value, "value", value)
 
 
 def _parse_final_response(final_response: Any, schema: dict) -> dict:

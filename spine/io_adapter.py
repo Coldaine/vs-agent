@@ -447,15 +447,8 @@ class IOAdapter:
         from capture_transform import frame_to_hit_test
 
         frame_size = None
-        try:
-            frame = self.screenshot()
-            frame_size = (frame.width, frame.height)
-        except Exception:
-            # Fall back to configured calibration resolution when capture is
-            # temporarily unavailable; frame_to_hit_test still applies scale.
-            expected = self.config.get("capture_calibration_resolution")
-            if expected is not None:
-                frame_size = (int(expected[0]), int(expected[1]))
+        frame = self.screenshot()
+        frame_size = (frame.width, frame.height)
 
         hit_x, hit_y = frame_to_hit_test(
             x, y, self.config, frame_size=frame_size

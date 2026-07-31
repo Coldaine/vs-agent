@@ -305,10 +305,43 @@ class SpineGameToolsTests(unittest.TestCase):
             tools, io, controller, _ = self.make_tools(root)
             tools.prepare()
 
-            tools.menu_action("click", click=[100, 200])
+            tools.menu_action("click", click=[10, 20])
 
-            self.assertEqual(io.clicks, [(100, 200)])
+            self.assertEqual(io.clicks, [(10, 20)])
             self.assertEqual(controller.submissions, [])
+
+    def test_menu_action_rejects_click_with_non_click_action(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            tools, io, _, _ = self.make_tools(root)
+            tools.prepare()
+
+            with self.assertRaisesRegex(ValueError, "action='click'"):
+                tools.menu_action("down", click=[10, 10])
+
+            self.assertEqual(io.clicks, [])
+
+    def test_menu_action_rejects_click_outside_captured_frame(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            tools, io, _, _ = self.make_tools(root)
+            tools.prepare()
+
+            with self.assertRaisesRegex(ValueError, "outside captured frame"):
+                tools.menu_action("click", click=[100, 100])
+
+            self.assertEqual(io.clicks, [])
+
+    def test_level_up_rejects_out_of_range_option_before_launch(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            tools, _, controller, launch = self.make_tools(root)
+            tools.prepare()
+            tools.observe()
+            tools.last_options = ["A", "B", "C"]
+
+            with self.assertRaisesRegex(ValueError, "between 1 and 3"):
+                tools.select_level_up(4)
+
+            self.assertEqual(launch.calls, ["launch_game"])
+            self.assertGreaterEqual(controller.neutralized, 1)
 
     def test_model_proposal_reaches_controller_but_never_io_directly(self) -> None:
         with tempfile.TemporaryDirectory() as root:
