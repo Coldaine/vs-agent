@@ -3,6 +3,7 @@ episodes/
 corpus/
 eval_set/
 status/*.png
+status/probe_*.jpg
 runtime/
 __pycache__/
 *.pyc
