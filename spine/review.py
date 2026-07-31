@@ -31,7 +31,7 @@ def generate_directive(states: list[dict]) -> str:
         return (f"Override rate spiked to {worst_rate:.0%} during "
                 f"t={worst:.0f}-{worst+window:.0f} (run median "
                 f"{median_rate:.0%}). Inspect that window: was the "
-                "pilot wrong, or was the reflex layer over-sensitive?")
+                "follower wrong, or was the reflex layer over-sensitive?")
     return "full autopsy"
 
 
@@ -49,8 +49,8 @@ def assemble_packet(run_dir: str) -> dict:
             if ft:
                 histogram[ft] = histogram.get(ft, 0) + 1
     prompts = {
-        "pilot": open("prompts/pilot.md", encoding="utf-8").read(),
-        "planner": open("prompts/planner.md", encoding="utf-8").read(),
+        "follower": open("prompts/follower.md", encoding="utf-8").read(),
+        "leader": open("prompts/leader.md", encoding="utf-8").read(),
     }
     return {"states": packet_states, "keyframes": keyframes,
             "outcome": outcome, "histogram": histogram,
@@ -65,9 +65,9 @@ def review_run(run_dir: str):
 
     autopsy = model_client.call_subagent(
         autopsy_prompt, packet, keyframes=packet["keyframes"])
-    planner_path = os.path.join(run_dir, "planner.jsonl")
+    planner_path = os.path.join(run_dir, "leader.jsonl")
     if not os.path.exists(planner_path):
-        planner_path = os.path.join(run_dir, "leader.jsonl")
+        planner_path = os.path.join(run_dir, "planner.jsonl")
     planner_log = [json.loads(l) for l in open(planner_path)] \
         if os.path.exists(planner_path) else []
     build = model_client.call_subagent(

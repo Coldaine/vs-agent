@@ -128,7 +128,7 @@ def _run_sync(async_name: str, operation: Callable[[], object]):
     )
 
 
-PILOT_SCHEMA = {
+FOLLOWER_SCHEMA = {
     "type": "object",
     "properties": {
         "direction": {"type": "string", "enum": sorted(DIRECTIONS)},
@@ -140,7 +140,7 @@ PILOT_SCHEMA = {
 }
 
 
-async def acall_pilot(
+async def acall_follower(
     prompt_text: str, state: dict, frame, brief: str
 ) -> tuple[str, float]:
     filled = (
@@ -149,7 +149,7 @@ async def acall_pilot(
     )
     with _frame_path(frame) as image_path:
         result = await _ainvoke(
-            "call_pilot", "follower", filled, PILOT_SCHEMA, image_path
+            "call_follower", "follower", filled, FOLLOWER_SCHEMA, image_path
         )
     direction = str(result.get("direction", "HOLD")).upper()
     if direction not in DIRECTIONS:
@@ -158,14 +158,14 @@ async def acall_pilot(
     return direction, speed
 
 
-def call_pilot(prompt_text: str, state: dict, frame, brief: str) -> tuple[str, float]:
+def call_follower(prompt_text: str, state: dict, frame, brief: str) -> tuple[str, float]:
     return _run_sync(
-        "acall_pilot",
-        lambda: acall_pilot(prompt_text, state, frame, brief),
+        "acall_follower",
+        lambda: acall_follower(prompt_text, state, frame, brief),
     )
 
 
-PILOT_EVAL_SCHEMA = {
+FOLLOWER_EVAL_SCHEMA = {
     "type": "object",
     "properties": {
         "action": {"type": "string", "enum": sorted(DIRECTIONS)},
@@ -178,20 +178,20 @@ PILOT_EVAL_SCHEMA = {
 }
 
 
-async def acall_pilot_eval(prompt_text: str, frame_path: str) -> dict:
+async def acall_follower_eval(prompt_text: str, frame_path: str) -> dict:
     prompt = prompt_text + "\nReturn the requested evaluation object."
     return await _ainvoke(
-        "call_pilot_eval", "follower", prompt, PILOT_EVAL_SCHEMA, Path(frame_path)
+        "call_follower_eval", "follower", prompt, FOLLOWER_EVAL_SCHEMA, Path(frame_path)
     )
 
 
-def call_pilot_eval(prompt_text: str, frame_path: str) -> dict:
+def call_follower_eval(prompt_text: str, frame_path: str) -> dict:
     return _run_sync(
-        "acall_pilot_eval", lambda: acall_pilot_eval(prompt_text, frame_path)
+        "acall_follower_eval", lambda: acall_follower_eval(prompt_text, frame_path)
     )
 
 
-PLANNER_SCHEMA = {
+LEADER_SCHEMA = {
     "type": "object",
     "properties": {
         "pick": {"type": "integer", "minimum": 1},
@@ -203,7 +203,7 @@ PLANNER_SCHEMA = {
 }
 
 
-async def acall_planner(
+async def acall_leader(
     prompt_text: str, frame, options: list[str], brief: str
 ) -> dict:
     prompt = (
@@ -211,7 +211,7 @@ async def acall_planner(
         f"Level-up options, top to bottom: {json.dumps(options)}\n"
         "Pick a one-based option index."
     )
-    result = await _ainvoke("call_planner", "leader", prompt, PLANNER_SCHEMA)
+    result = await _ainvoke("call_leader", "leader", prompt, LEADER_SCHEMA)
     return {
         "pick": result.get("pick", 1),
         "why": result.get("why", ""),
@@ -219,10 +219,10 @@ async def acall_planner(
     }
 
 
-def call_planner(prompt_text: str, frame, options: list[str], brief: str) -> dict:
+def call_leader(prompt_text: str, frame, options: list[str], brief: str) -> dict:
     return _run_sync(
-        "acall_planner",
-        lambda: acall_planner(prompt_text, frame, options, brief),
+        "acall_leader",
+        lambda: acall_leader(prompt_text, frame, options, brief),
     )
 
 

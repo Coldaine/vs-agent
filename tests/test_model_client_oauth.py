@@ -39,13 +39,13 @@ class ModelClientOAuthTests(unittest.TestCase):
     def tearDown(self) -> None:
         model_client.set_client_factory_for_testing(None)
 
-    def test_pilot_uses_oauth_follower_with_image_attachment(self) -> None:
+    def test_follower_uses_oauth_follower_with_image_attachment(self) -> None:
         runner = FakeCodexClient([
             {"direction": "SW", "speed": 0.6, "reason": "escape"}
         ])
         model_client.set_client_factory_for_testing(lambda: runner)
         with tempfile.NamedTemporaryFile(suffix=".jpg") as frame:
-            direction, speed = model_client.call_pilot(
+            direction, speed = model_client.call_follower(
                 "State {{STATE_JSON}} brief {{STRATEGY_BRIEF}}",
                 {"hp": 12},
                 frame.name,
@@ -57,13 +57,13 @@ class ModelClientOAuthTests(unittest.TestCase):
         self.assertEqual(runner.calls[0][3], Path(frame.name))
         self.assertEqual(runner.events, ["start", "close"])
 
-    def test_planner_uses_oauth_leader(self) -> None:
+    def test_leader_uses_oauth_leader(self) -> None:
         runner = FakeCodexClient([
             {"pick": 2, "why": "damage", "brief_update": "keep moving"}
         ])
         model_client.set_client_factory_for_testing(lambda: runner)
 
-        result = model_client.call_planner(
+        result = model_client.call_leader(
             "Choose.", None, ["A", "B", "C"], "old brief"
         )
 
@@ -78,7 +78,7 @@ class ModelClientOAuthTests(unittest.TestCase):
 
         with mock.patch.dict(os.environ, {"OPENAI_API_KEY": "forbidden"}, clear=False):
             with self.assertRaisesRegex(RuntimeError, "ChatGPT Pro OAuth only"):
-                model_client.call_planner("Choose.", None, ["A"], "")
+                model_client.call_leader("Choose.", None, ["A"], "")
 
         self.assertEqual(runner.calls, [])
 
@@ -93,14 +93,14 @@ class ModelClientAsyncBoundaryTests(unittest.IsolatedAsyncioTestCase):
         ])
         model_client.set_client_factory_for_testing(lambda: client)
 
-        result = await model_client.acall_planner("Choose.", None, ["A"], "")
+        result = await model_client.acall_leader("Choose.", None, ["A"], "")
 
         self.assertEqual(result["pick"], 1)
         self.assertEqual(client.events, ["start", "close"])
 
     async def test_sync_helper_rejects_use_inside_running_event_loop(self) -> None:
-        with self.assertRaisesRegex(RuntimeError, "await acall_planner"):
-            model_client.call_planner("Choose.", None, ["A"], "")
+        with self.assertRaisesRegex(RuntimeError, "await acall_leader"):
+            model_client.call_leader("Choose.", None, ["A"], "")
 
 
 if __name__ == "__main__":
