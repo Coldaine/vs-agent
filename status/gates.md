@@ -409,3 +409,12 @@ doppler run -- python spine/run.py --reflex-only
 - key_diff: 0.0031
 - key_ocr_before: a —— Rockstar (\& 28029] ~(=e)- E=_ | <p I Th r " a nd  . B 1B) Z +368 & a A 4. vw g — bie | i +403 1 rn +21% "iy  & a 7 ok qi ® _ s *- mn Ea Q 2 bd +31% 55 = zs es fee ; +50% : : 
 - key_ocr_after: Bh Vampire survivors = o x Rockstar " | 28029 | [_sacx ) (mercer) ms . Ss = i" & - ——= = ae Character Selection 7 ; | ' Te. P ih ; | «| Pall Ra) ih . A cl a Dy : ] @ =" ¢ a : | 2 «
+
+## G0 Plumbing Gate — 2026-07-31 03:09:22
+
+**Verdict:** FAILED
+
+**Results:**
+- launch: FAIL (game window not available after launch)
+
+**Evidence:**
