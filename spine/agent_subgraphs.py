@@ -66,13 +66,10 @@ MENU_LEADER_SCHEMA = {
     },
     "required": ["screen", "action", "click", "ready_for_run", "reason"],
     "additionalProperties": False,
-    "allOf": [
-        {
-            "if": {"properties": {"action": {"const": "click"}}},
-            "then": {"required": ["click"]},
-            "else": {"properties": {"click": {"const": None}}},
-        }
-    ],
+    # NOTE: no `allOf`/`if`/`then`/`else` conditional here. The Codex SDK's
+    # `output_schema` rejects those keywords (invalid_json_schema). The
+    # click-when-action=click invariant is enforced deterministically by
+    # SpineGameTools.menu_action, which validates coordinates and presence.
 }
 
 FOLLOWER_SCHEMA = {
