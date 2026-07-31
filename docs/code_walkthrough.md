@@ -138,7 +138,8 @@ be able to say why its justification no longer holds — otherwise don't.
 ## Runtime seams
 
 `io_adapter` and `perceive` fail loudly when capture, input, OCR, or weights are
-unavailable. `oauth_codex` fails closed unless Codex reports a ChatGPT login and
-rejects inherited model API keys. `game_tools` bounds model proposals through
-the deterministic controller. Plausible-looking fallback data or an API-backed
+unavailable. `codex_sdk_client` fails closed unless public SDK metadata reports
+a ChatGPT-managed account; compatibility `model_client` helpers also reject
+inherited model API keys. `game_tools` bounds model proposals through the
+deterministic controller. Plausible-looking fallback data or an API-backed
 provider fallback would silently invalidate traces, so neither is permitted.

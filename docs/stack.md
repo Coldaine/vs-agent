@@ -4,10 +4,10 @@
 |---|---|---|
 | Goal runtime | LangGraph 1.2.x | phases, routing, checkpoints, resume |
 | Checkpoints | `langgraph-checkpoint-sqlite` | durable local goal state |
-| Authentication | existing Codex CLI ChatGPT Pro OAuth session | OAuth storage and refresh |
-| Leader model | `gpt-5.6-luna` via `codex exec` | intent and level-up proposal |
-| Follower model | `gpt-5.6-luna` via `codex exec` | one movement proposal |
-| Model adapter | `spine/oauth_codex.py` | structured OAuth-only invocation |
+| Authentication | official `openai-codex` SDK + managed `codex app-server` ChatGPT login | auth storage and refresh |
+| Leader model | explicitly configured `gpt-5.6-luna` SDK thread | intent and level-up proposal |
+| Follower model | explicitly configured `gpt-5.6-luna` SDK thread | one movement proposal |
+| Model adapter | `spine/codex_sdk_client.py` | SDK lifecycle, role threads, images, schema validation |
 | Game bridge | `spine/game_tools.py` | bounded operations and evidence |
 | Controller | `spine/controller.py` | sole movement-input writer |
 | Reflex | `spine/reflex.py` plus YOLO detections | deterministic safety veto |
@@ -17,9 +17,16 @@
 
 ## Authentication: critically not API
 
-The model runtime uses **ChatGPT Pro OAuth, not the OpenAI API**. It does not accept an API base URL or provider key. It does not use OpenRouter or DeepSeek. It does not read the OAuth credential. The installed Codex CLI is already logged in to ChatGPT and is the only component allowed to own that authentication state.
+The model runtime uses the official SDK's **ChatGPT-managed login, not the
+OpenAI API**. It does not accept an API base URL or provider key and does not
+use OpenRouter or DeepSeek. The SDK/app-server owns authentication state;
+repository code reads only public account metadata and never reads the OAuth
+credential.
 
-The LangGraph path deliberately rejects populated `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, and `DEEPSEEK_API_KEY` variables. This is a fail-closed guarantee against accidentally billing or routing through an API when the requested authentication is the user's ChatGPT Pro OAuth subscription.
+Runtime policy forbids `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, and
+`DEEPSEEK_API_KEY`. Compatibility helpers reject populated values explicitly;
+the direct LangGraph path binds authentication by accepting only public SDK
+account metadata with `type=chatgpt`.
 
 ## Why LangGraph
 
@@ -28,17 +35,23 @@ LangGraph supplies durable state transitions, checkpoint/resume, explicit branch
 ## Runtime command
 
 ```powershell
-codex login status
 .venv\Scripts\python.exe spine\smoke_oauth_graph.py
 .venv\Scripts\python.exe spine\run.py `
   --goal "Complete a fixed-condition run and prove survival reached 540 seconds" `
   --thread-id goal-g4
 ```
 
-Expected authentication preflight: `Logged in using ChatGPT`. Do not wrap this command in Doppler and do not inject any API key.
+The smoke itself validates public SDK account metadata, exact model-catalog
+availability, both child graphs, distinct role threads, structured decisions,
+and the image attachment. Do not wrap it in Doppler or inject any API key.
 
 ## Current model assignment
 
-Both leader and follower use `gpt-5.6-luna` for the migration. The follower is intentionally not expected to maintain a 2 Hz network/model cadence. It proposes an intent/direction, while `SpineGameTools.control_window()` and `Controller` handle a bounded deterministic tick window. Latency is measured and passed into controller staleness handling.
+Both leader and follower role threads explicitly configure `gpt-5.6-luna` on
+start/resume. Public catalog availability is checked separately; the
+SDK `TurnResult` does not echo the model. The follower is intentionally not
+expected to maintain a 2 Hz network/model cadence. It proposes an
+intent/direction, while `SpineGameTools.control_window()` and `Controller`
+handle a bounded deterministic tick window.
 
 The eventual optimized follower may be a smaller local or distilled model, but that is not the current runtime and must not be substituted silently.

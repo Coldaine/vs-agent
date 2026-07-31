@@ -6,13 +6,15 @@ Everything in this file is binding.
 
 ## Authentication and framework invariant
 
-The active runtime uses **ChatGPT Pro OAuth through the installed Codex CLI**.
-This is critically **not the OpenAI API** and not an OpenAI-compatible HTTP
-endpoint. Do not use or restore `OPENAI_API_KEY`, `OPENROUTER_API_KEY`,
+The active runtime uses the official `openai-codex` Python SDK and managed
+`codex app-server` with the existing **ChatGPT-managed login**. This is
+critically **not the OpenAI API** and not an OpenAI-compatible HTTP endpoint.
+Do not use or restore `OPENAI_API_KEY`, `OPENROUTER_API_KEY`,
 `DEEPSEEK_API_KEY`, OpenRouter, direct DeepSeek, Responses API, or Chat
 Completions API in the LangGraph runtime. Repository code must never read or
-copy OAuth credentials; Codex CLI owns them. Both leader and follower are
-temporarily pinned to `gpt-5.6-luna`.
+copy OAuth credentials; verify authentication only through public SDK account
+metadata. Both leader and follower threads explicitly configure
+`gpt-5.6-luna`.
 
 ## START HERE
 
@@ -37,8 +39,9 @@ physical check.
 
 - LangGraph owns the durable goal loop, leader/follower turns, routing,
   checkpoint/resume, retries, and completion state.
-- `spine/oauth_codex.py` invokes `gpt-5.6-luna` through ChatGPT Pro OAuth for
-  both leader and follower. It never accepts an API key.
+- `spine/agent_subgraphs.py` owns separately compiled leader/follower graphs;
+  `spine/codex_sdk_client.py` invokes them through the official SDK/app-server,
+  uses distinct persistent role threads, and never accepts an API key.
 - `spine/game_tools.py` exposes bounded operations over `io_adapter.py`,
   `launch.py`, `perceive.py`, `controller.py`, and `trace.py`.
 - The reflex/controller layer runs the real-time control window and overrides
@@ -194,4 +197,3 @@ model understand what we ask and answer reliably"; Loop C answers
 - If the environment is broken for >30 min (endpoint down, keys not
   registering, black frames), write status/BLOCKED.md describing the
   failure and halt the loop.
-

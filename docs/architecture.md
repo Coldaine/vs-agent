@@ -2,9 +2,16 @@
 
 ## Current decision
 
-LangGraph is the agent runtime. The active model path uses **ChatGPT Pro OAuth through the locally authenticated Codex CLI only**. It does **not** use an OpenAI API key, OpenAI HTTP API, Responses API, Chat Completions API, OpenRouter API, DeepSeek API, or an OpenAI-compatible endpoint.
+LangGraph is the agent runtime. The active model path uses the official
+`openai-codex==0.144.4` Python SDK and its managed `codex app-server` process.
+The app-server uses the existing ChatGPT-managed login. This path does **not**
+use an OpenAI API key, OpenAI HTTP API, Responses API, Chat Completions API,
+OpenRouter API, DeepSeek API, or an OpenAI-compatible endpoint.
 
-The installed Codex CLI owns OAuth storage and refresh. Repository code may execute `codex login status` and `codex exec`; it must never open, parse, copy, export, print, or commit the OAuth credential material itself.
+The SDK/app-server owns authentication storage and refresh. Repository code
+checks only the SDK's public account metadata and requires
+`account.type == "chatgpt"`; it never opens, parses, copies, exports, prints, or
+commits OAuth credential material.
 
 Both temporary runtime roles are pinned to `gpt-5.6-luna`:
 
@@ -29,29 +36,41 @@ LangGraph goal thread + SQLite checkpoints
 deterministic evidence evaluator -> achieved | not_met | blocked
 ```
 
-`spine/goal_graph.py` owns phase transitions and resumable state. `spine/oauth_codex.py` owns structured model invocation. `spine/game_tools.py` owns the narrow bridge into existing game capabilities. `spine/controller.py` remains the sole movement-input writer. `spine/io_adapter.py`, `spine/launch.py`, `spine/perceive.py`, and `spine/trace.py` retain their existing responsibilities.
+`spine/goal_graph.py` owns phase transitions and resumable state.
+`spine/agent_subgraphs.py` owns the separately compiled `leader_agent` and
+`follower_agent` child graphs. `spine/codex_sdk_client.py` owns the narrow
+official-SDK invocation boundary and persistent role-to-Codex-thread bindings.
+`spine/game_tools.py` owns the bridge into existing game capabilities.
+`spine/controller.py` remains the sole movement-input writer.
 
 LangGraph nodes never hold keys and never implement a real-time loop. A follower proposal is handed to the controller with measured latency. `control_window()` runs a short deterministic tick window, applies reflex veto/staleness/dither rules, records evidence, and neutralizes on exceptions.
 
 ## Authentication invariant
 
-The LangGraph process fails closed if any of these variables are populated:
+Runtime policy forbids these variables in the model process:
 
 - `OPENAI_API_KEY`
 - `OPENROUTER_API_KEY`
 - `DEEPSEEK_API_KEY`
 
-This prevents a configured shell, Doppler wrapper, or inherited environment from silently changing the requested ChatGPT Pro OAuth path into an API-billed path. `CodexOAuthRunner` additionally requires `codex login status` to contain `Logged in using ChatGPT`.
+The compatibility helpers in `spine/model_client.py` reject them explicitly.
+The direct LangGraph path does not select an API provider from these variables;
+`CodexAgentClient.start()` requires the public SDK account representation to
+report `type=chatgpt`, which is the binding authentication check.
 
-Every model invocation uses these Codex controls:
+Every model invocation uses these official SDK/app-server controls:
 
-- `--ignore-user-config` and `--ignore-rules` to avoid unrelated project/provider behavior;
-- `--ephemeral` so role calls do not create reusable Codex conversations;
-- `--sandbox read-only` and an empty temporary working directory;
-- `--model gpt-5.6-luna` for both leader and follower;
-- `--output-schema` for constrained JSON output;
-- `--image <path>` for follower/leader visual observations;
-- JSON event inspection that rejects observed tool activity.
+- `model="gpt-5.6-luna"` on SDK thread start/resume for both roles;
+- `Sandbox.read_only` and `ApprovalMode.deny_all`;
+- app-server configuration disabling web search and the native shell tool;
+- `output_schema` plus local JSON Schema validation;
+- `TextInput` plus `LocalImageInput` for visual observations;
+- persistent, distinct Codex thread IDs bound to leader and follower roles.
+
+The public model catalog is separate evidence from turn output. The 2026-07-30
+smoke confirmed `gpt-5.6-luna` is catalog-visible with text and image input.
+The SDK `TurnResult` did not echo a model field, so no document or report may
+describe the configured/catalog model as turn-response metadata.
 
 ## Goal semantics
 
@@ -79,4 +98,8 @@ focus/size flicker and breaks the hit-test transform.
 - The six modifier values are explicit in `spine/config.yaml`, but a fresh live proof that the menu UI matches all six values is still required before a scored run.
 - Attach/recovery from an already-running gameplay or level-up screen is implemented; live attach evidence still needs a gates.md append.
 - The current upstream detector weights cover threats but not a proven gem/elite mapping.
-- The real OAuth leader/follower graph smoke passes through both Luna roles. A live game smoke is separate evidence and must not be inferred from the no-game smoke.
+- The real managed-OAuth no-game smoke passed through both actual child graphs,
+  created distinct role Codex threads, returned schema-valid decisions, and
+  attached `status/g0_capture.jpg` without emitting game input. This proves the
+  model/graph/image boundary only. A live game action and G0 remain separate
+  evidence and must not be inferred from this smoke.

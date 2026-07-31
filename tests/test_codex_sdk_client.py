@@ -89,6 +89,7 @@ class CodexAgentClientTests(unittest.IsolatedAsyncioTestCase):
         self,
         sdk: FakeSDK,
         image_factory=lambda path: ("image", path),
+        text_factory=lambda text: ("text", text),
         thread_bindings: dict[str, str] | None = None,
     ):
         self.sandbox = object()
@@ -96,6 +97,7 @@ class CodexAgentClientTests(unittest.IsolatedAsyncioTestCase):
         return codex_sdk_client.CodexAgentClient(
             sdk_factory=lambda: sdk,
             image_factory=image_factory,
+            text_factory=text_factory,
             sandbox=self.sandbox,
             approval_mode=self.approval_mode,
             thread_bindings=thread_bindings,
@@ -165,6 +167,8 @@ class CodexAgentClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(invocation.turn_id, "turn-1")
         self.assertEqual(invocation.usage, {"total_tokens": 12})
         self.assertEqual(len(sdk.started), 1)
+        self.assertEqual(client.configured_model, "gpt-5.6-luna")
+        self.assertEqual(sdk.started[0]["model"], "gpt-5.6-luna")
         self.assertEqual(sdk.started[0]["sandbox"], self.sandbox)
         self.assertEqual(sdk.started[0]["approval_mode"], self.approval_mode)
         self.assertEqual(
@@ -189,6 +193,7 @@ class CodexAgentClientTests(unittest.IsolatedAsyncioTestCase):
                 "approval_mode": self.approval_mode,
                 "sandbox": self.sandbox,
                 "config": {"web_search": "disabled", "features": {"shell_tool": False}},
+                "model": "gpt-5.6-luna",
             })],
         )
         self.assertEqual(sdk.started, [])
@@ -230,14 +235,14 @@ class CodexAgentClientTests(unittest.IsolatedAsyncioTestCase):
             seen_paths.append(path)
             return ("local-image", path)
 
-        await self._client(sdk, image_factory).invoke(
+        await self._client(sdk, image_factory=image_factory).invoke(
             "follower", "Inspect frame.", {"type": "object"}, image_path=Path("frame.jpg")
         )
 
         self.assertEqual(seen_paths, ["frame.jpg"])
         self.assertEqual(
             thread.run_calls[0][0],
-            ["Inspect frame.", ("local-image", "frame.jpg")],
+            [("text", "Inspect frame."), ("local-image", "frame.jpg")],
         )
 
     async def test_invoke_rejects_an_invalid_json_final_response(self) -> None:

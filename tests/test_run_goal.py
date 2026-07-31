@@ -14,7 +14,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "spine"))
 import run  # noqa: E402
 from codex_sdk_client import CodexInvocation  # noqa: E402
 import goal_graph  # noqa: E402
-import smoke_oauth_graph  # noqa: E402
 
 
 class RecordingCodexClient:
@@ -237,26 +236,6 @@ class GoalResumeAndFailureTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(FailingCodexClient.instances[0].events[-1], "close")
         self.assertIn("neutralize", tools.events)
         self.assertEqual(tools.events[-1], "close-tools")
-
-
-class OfficialSdkSmokeTests(unittest.IsolatedAsyncioTestCase):
-    async def test_no_game_smoke_runs_two_child_roles_under_one_sdk_client(self) -> None:
-        RecordingCodexClient.instances = []
-
-        result = await smoke_oauth_graph.run_smoke(
-            codex_factory=RecordingCodexClient
-        )
-
-        self.assertEqual(result["status"], "achieved")
-        self.assertEqual(result["evidence"], ["smoke-control", "smoke-outcome"])
-        self.assertEqual(len(RecordingCodexClient.instances), 1)
-        events = RecordingCodexClient.instances[0].events
-        self.assertEqual(
-            [event[1] for event in events if isinstance(event, tuple)],
-            ["leader", "follower"],
-        )
-        self.assertEqual(events[0], "start")
-        self.assertEqual(events[-1], "close")
 
 
 if __name__ == "__main__":

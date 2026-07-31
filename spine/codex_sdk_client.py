@@ -11,13 +11,20 @@ from typing import Any
 
 from jsonschema import ValidationError, validate
 from jsonschema.exceptions import SchemaError
-from openai_codex import ApprovalMode, AsyncCodex, LocalImageInput, Sandbox
+from openai_codex import (
+    ApprovalMode,
+    AsyncCodex,
+    LocalImageInput,
+    Sandbox,
+    TextInput,
+)
 
 
 _RESTRICTED_CONFIG = {
     "web_search": "disabled",
     "features": {"shell_tool": False},
 }
+DEFAULT_MODEL = "gpt-5.6-luna"
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,12 +45,18 @@ class CodexAgentClient:
         *,
         sdk_factory: Callable[[], Any] = AsyncCodex,
         image_factory: Callable[[str], Any] = LocalImageInput,
+        text_factory: Callable[[str], Any] = TextInput,
+        model: str = DEFAULT_MODEL,
         sandbox: Sandbox = Sandbox.read_only,
         approval_mode: ApprovalMode = ApprovalMode.deny_all,
         thread_bindings: Mapping[str, str] | None = None,
     ) -> None:
         self._sdk_factory = sdk_factory
         self._image_factory = image_factory
+        self._text_factory = text_factory
+        if not model.strip():
+            raise ValueError("model must be non-empty")
+        self._model = model
         self._sandbox = sandbox
         self._approval_mode = approval_mode
         self._context: Any | None = None
@@ -60,6 +73,12 @@ class CodexAgentClient:
         """Return the role-to-SDK-thread bindings to persist in checkpoint state."""
 
         return dict(self._thread_bindings)
+
+    @property
+    def configured_model(self) -> str:
+        """Return the explicit SDK thread model configured by this client."""
+
+        return self._model
 
     async def start(self) -> None:
         """Enter the SDK once and confirm it is using the existing ChatGPT login."""
@@ -115,7 +134,10 @@ class CodexAgentClient:
             thread = await self._role_thread(role, thread_id)
         input_value: str | list[Any] = prompt
         if image_path is not None:
-            input_value = [prompt, self._image_factory(str(image_path))]
+            input_value = [
+                self._text_factory(prompt),
+                self._image_factory(str(image_path)),
+            ]
         turn = await thread.run(
             input_value,
             output_schema=schema,
@@ -135,6 +157,7 @@ class CodexAgentClient:
             "approval_mode": self._approval_mode,
             "sandbox": self._sandbox,
             "config": _RESTRICTED_CONFIG,
+            "model": self._model,
         }
 
     async def _role_thread(self, role: str, thread_id: str | None) -> Any:
