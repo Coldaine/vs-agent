@@ -190,6 +190,27 @@ class FollowerState(FollowerInput, FollowerOutput):
     pass
 
 
+def _load_prompt(name: str, variables: dict[str, Any]) -> str:
+    """Load a prompt from the prompts/ directory and apply templating."""
+    prompt_path = Path(__file__).parent.parent / "prompts" / f"{name}.md"
+    if not prompt_path.exists():
+        raise RuntimeError(f"required prompt file is missing: {prompt_path}")
+
+    with open(prompt_path, "r", encoding="utf-8") as f:
+        template = f.read()
+
+    for key, value in variables.items():
+        placeholder = "{{" + key.upper() + "}}"
+        str_value = (
+            json.dumps(value, sort_keys=True)
+            if isinstance(value, (dict, list))
+            else str(value)
+        )
+        template = template.replace(placeholder, str_value)
+
+    return template
+
+
 def _image_path(observation: dict[str, Any]) -> Path | None:
     image_value = observation.get("image_path")
     return Path(image_value) if image_value else None
@@ -198,11 +219,9 @@ def _image_path(observation: dict[str, Any]) -> Path | None:
 def _contract_blurb(contract: dict[str, Any]) -> str:
     modifiers = contract.get("modifiers") or {}
     return (
-        f"Fixed eval contract: character={contract.get('character', 'Antonio')}, "
-        f"stage={contract.get('stage', 'Mad Forest')}, "
-        f"modifiers={json.dumps(modifiers, sort_keys=True)}. "
-        "Enforce this contract before starting a run. "
-        "OCR hints in the observation are unreliable; trust the screenshot."
+        f"Character={contract.get('character', 'Antonio')}, "
+        f"Stage={contract.get('stage', 'Mad Forest')}, "
+        f"Modifiers={json.dumps(modifiers, sort_keys=True)}"
     )
 
 
@@ -212,29 +231,30 @@ async def _invoke_leader(
 ) -> LeaderOutput:
     observation = state["leader_observation"]
     if state["leader_decision_kind"] == "menu":
-        prompt = (
-            f"Goal: {state['leader_goal']}\n"
-            f"{_contract_blurb(state['leader_eval_contract'])}\n"
-            f"Menu steps remaining: {state['leader_menu_steps_left']}\n"
-            "Observation (hints are non-authoritative): "
-            f"{json.dumps(observation, sort_keys=True)}\n"
-            "You are navigating pre-run menus from the screenshot. "
-            "Return exactly one action. Prefer keyboard actions "
-            "(up/down/left/right/confirm/esc/start). Use click with frame "
-            "[x,y] only when a key clearly cannot select the target. "
-            "Set ready_for_run true only when the screenshot already shows "
-            "an in-game HUD or level-up overlay after Antonio + Mad Forest "
-            "with the required modifiers."
-        )
+        prompt = _load_prompt("leader_menu", {
+            "goal": state["leader_goal"],
+            "contract": _contract_blurb(state["leader_eval_contract"]),
+            "character": state["leader_eval_contract"].get("character", "Antonio"),
+            "stage": state["leader_eval_contract"].get("stage", "Mad Forest"),
+            "modifiers": state["leader_eval_contract"].get("modifiers", {}),
+            "steps_left": state["leader_menu_steps_left"],
+            "observation": observation.get("ocr_hint", "")
+        })
         schema = MENU_LEADER_SCHEMA
     else:
-        prompt = (
-            f"Goal: {state['leader_goal']}\n"
-            f"{_contract_blurb(state['leader_eval_contract'])}\n"
-            f"Observation: {json.dumps(observation, sort_keys=True)}\n"
-            "Return the high-level intent. On LEVEL_UP, option must be the "
-            "one-based option index. Otherwise option must be null."
-        )
+        summary = observation.get("summary")
+        hud = summary if isinstance(summary, Mapping) else {}
+        prompt = _load_prompt("leader", {
+            "goal": state["leader_goal"],
+            "contract": _contract_blurb(state["leader_eval_contract"]),
+            "inventory": hud.get("inventory", []),
+            "hp": hud.get("hp"),
+            "level": hud.get("level"),
+            "timer": hud.get("timer"),
+            "strategy_brief": "Follow the build doctrine and survive.",
+            "observation": observation,
+            "options": observation.get("options", []),
+        })
         schema = LEADER_SCHEMA
     invocation = await runtime.context.codex.invoke(
         "leader",
@@ -256,13 +276,15 @@ async def _invoke_follower(
     runtime: Runtime[AgentModelRuntime],
 ) -> FollowerOutput:
     observation = state["follower_observation"]
-    prompt = (
-        f"Goal: {state['follower_goal']}\n"
-        "Leader intent: "
-        f"{json.dumps(state['follower_leader_decision'], sort_keys=True)}\n"
-        f"Observation: {json.dumps(observation, sort_keys=True)}\n"
-        "Return one movement proposal. The deterministic controller may veto it."
-    )
+    decision = state["follower_leader_decision"] or {}
+
+    prompt = _load_prompt("follower", {
+        "goal": state["follower_goal"],
+        "leader_intent": decision.get("intent", decision.get("reason", "Unknown")),
+        "strategy_brief": "Drift to avoid threats and collect gems.",
+        "state_json": observation.get("summary", {})
+    })
+
     invocation = await runtime.context.codex.invoke(
         "follower",
         prompt,

@@ -19,7 +19,7 @@ inverse: false
 endless: false
 goal_target_survival_s: 540
 # Vision leader menu-entry budget (one screenshot/action per step).
-menu_steps_budget: 40
+menu_steps_budget: 80
 menu_action_settle_s: 0.35
 
 # perception
@@ -94,6 +94,11 @@ hud_regions:
   level: null
   timer: null
   level_up_options: null
+
+# OCR triggers for screen state detection
+level_up_ocr_trigger: "LEVEL UP"
+death_ocr_triggers: ["YOU DIED", "GAME OVER", "GNMEOVER", "GAME OVER &"]
+run_end_ocr_triggers: ["REAPER", "TIME'S UP", "STAGESET"]
 
 # paths
 episodes_dir: "episodes"

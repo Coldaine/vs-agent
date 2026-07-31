@@ -16,7 +16,10 @@ for this runtime. Never inspect OAuth token files; use only public SDK account
 metadata.
 
 Both role threads explicitly configure `gpt-5.6-luna`; catalog availability is
-separate from turn metadata. The 2026-07-30 real no-game/image smoke passed,
-but it emitted no game input and is not live G0 proof. The controller remains
-the only movement-input writer. See the Task 4 report for exact sanitized
-evidence and `docs/architecture.md` for remaining live boundaries.
+separate from turn metadata. G0 remains in progress: a vision-led entry attempt
+does not prove the required live HUD, modifier, input, and recovery evidence.
+The controller remains the only movement-input writer. See `status/gates.md`
+and `docs/architecture.md` for the current evidence and live boundaries.
+
+Active work is the bounded G0 vertical slice. Prompts are externalized under
+`prompts/`; capture retry hardening is recorded in the implementation history.

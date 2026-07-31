@@ -324,10 +324,10 @@ class GoalGraphTests(unittest.IsolatedAsyncioTestCase):
                     "image_path": "menu.jpg",
                 },
                 {
-                    "screen_type": "MENU",
-                    "screen_guess": "UNKNOWN",
-                    "ocr_hint": "still garbage",
-                    "image_path": "menu2.jpg",
+                    "screen_type": "PLAY",
+                    "screen_guess": "IN_GAME",
+                    "ocr_hint": "00:16",
+                    "image_path": "hud.jpg",
                 },
             ],
             entry_only=True,
@@ -342,7 +342,6 @@ class GoalGraphTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result["status"], "achieved")
         self.assertIn(("menu_action", "confirm", None), tools.calls)
-        self.assertIn("mark_in_game", tools.calls)
         self.assertIn(("evaluate_entry", "run-test"), tools.calls)
         self.assertNotIn(("submit_direction", "NE", 0.0), tools.calls)
         self.assertTrue(

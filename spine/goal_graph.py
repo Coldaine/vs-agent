@@ -228,13 +228,11 @@ def build_goal_graph(
         return "menu_action"
 
     def promote_in_game(state: GoalState, runtime: Runtime[AgentRuntime]) -> dict:
-        tools = _runtime_tools(runtime)
         decision = state["leader_decision"] or {}
         claimed = str(decision.get("screen") or "IN_GAME")
-        _runtime_tools(runtime).mark_in_game()
         observation = dict(state["observation"] or {})
-        observation["screen_type"] = "LEVEL_UP" if claimed == "LEVEL_UP" else "PLAY"
-        observation["promoted_by_vision"] = True
+        observation["vision_in_game_claim"] = claimed
+        tools = _runtime_tools(runtime)
         if tools.writer is not None:
             tools.writer.log_menu_turn(
                 screen_in=str(observation.get("screen_type", "PLAY")),
@@ -243,18 +241,20 @@ def build_goal_graph(
                 leader_click=decision.get("click"),
                 leader_ready=bool(decision.get("ready_for_run")),
                 leader_reason=str(decision.get("reason", "")),
-                controller_evidence=f"vision-promote:{claimed}",
+                controller_evidence=f"vision-claim:{claimed}; rechecking",
                 steps_left=state.get("menu_steps_left"),
             )
         return {
-            "phase": "in_game",
+            "phase": "rechecking_in_game",
             "observation": observation,
-            "evidence": [*state["evidence"], f"vision-promote:{claimed}"],
+            "evidence": [*state["evidence"], f"vision-claim:{claimed}"],
             "tool_state": _tool_state(_runtime_tools(runtime)),
         }
 
     def route_promote(state: GoalState) -> str:
-        return "evaluate_entry" if state.get("entry_only") else "leader"
+        # A model's HUD claim is only a cue to capture a fresh deterministic
+        # observation. It cannot complete an entry-only gate by itself.
+        return "observe"
 
     def evaluate_entry(state: GoalState, runtime: Runtime[AgentRuntime]) -> dict:
         tools = _runtime_tools(runtime)
@@ -508,7 +508,7 @@ def build_goal_graph(
     graph.add_conditional_edges(
         "promote_in_game",
         route_promote,
-        {"leader": "leader", "evaluate_entry": "evaluate_entry"},
+        {"observe": "observe"},
     )
     graph.add_edge("evaluate_entry", END)
     graph.add_conditional_edges(

@@ -333,11 +333,10 @@ class SpineGameTools:
         }
 
     def evaluate_entry(self, run_id: str) -> dict:
-        """Success = vision reached in-game; used by G0 / --entry-only."""
+        """Evaluate an entry-only run after an observed in-game transition."""
         self._require_active_run()
         if run_id != self.run_id:
             raise ValueError(f"run ID mismatch: expected {self.run_id}, got {run_id}")
-        self._enter_game()
         if not self._closed:
             self.writer.close(
                 survived_s=0.0,
@@ -353,7 +352,7 @@ class SpineGameTools:
         outcome_path = str(Path(self.writer.dir, "outcome.json").resolve())
         return {
             "status": "achieved" if self.in_game else "not_met",
-            "reason": "vision reached in-game HUD under fixed eval contract",
+            "reason": "observed in-game HUD under fixed eval contract",
             "evidence": [outcome_path],
         }
 
