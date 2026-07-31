@@ -130,6 +130,12 @@ class IOAdapter:
         minimum = config.get("capture_min_dimensions", [640, 480])
         self._min_capture_width, self._min_capture_height = minimum
         self._capture_retries = int(config.get("capture_retries", 3))
+        # Configured backoff gives ~2.5s total window (5 x 0.5s) to absorb
+        # transient WGC black frames during game/menu transitions.  A run
+        # should not fail on a one-off capture glitch.
+        self._capture_retry_delay_s = float(
+            config.get("capture_retry_delay_s", 0.5)
+        )
         self._last_img: Optional[np.ndarray] = None
         self._input_backend = config.get("input_backend", "gamepad")
         self._gamepad = None
@@ -350,7 +356,12 @@ class IOAdapter:
         return img
 
     def screenshot(self) -> Frame:
-        """Return a valid game frame, retrying transient WGC resize glitches."""
+        """Return a valid game frame, retrying transient WGC resize glitches.
+
+        Black frames can occur during game boot, screen transitions, or
+        momentary WGC blips.  The retry window (~2.5s with default config)
+        absorbs these without aborting the run.
+        """
         last_error = "capture returned no frame"
         for attempt in range(1, self._capture_retries + 1):
             try:
@@ -370,7 +381,7 @@ class IOAdapter:
             except BlackFrameError as error:
                 last_error = str(error)
                 if attempt < self._capture_retries:
-                    time.sleep(0.15)
+                    time.sleep(self._capture_retry_delay_s)
 
         raise BlackFrameError(last_error)
 

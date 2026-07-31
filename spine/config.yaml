@@ -66,7 +66,10 @@ wgc_monitor_origin: [-2560, 0]
 # DXCam output zero is the primary display. This game window runs on output 1.
 capture_output_idx: 1
 capture_min_dimensions: [640, 480]
-capture_retries: 3
+capture_retries: 5
+# Backoff between capture retries. A ~2.5s total window absorbs transient
+# WGC black frames during game/menu transitions without failing a run.
+capture_retry_delay_s: 0.5
 # G0 character-grid cursor changes affect a small fraction of the 2562x1472
 # frame. Calibrated from the live 0.0051 mean pixel delta; retain margin while
 # still requiring a visible screenshot change.

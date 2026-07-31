@@ -204,7 +204,7 @@ doppler run -- python spine/run.py --reflex-only
 - capture_mean_brightness: 92.87
 - key_diff: 0.911
 - key_ocr_before: a@  ae Character Selection 7  -.  &  me oreres  = ess) (? 1 :  | ry an : ah  ® : . : gy A | 2 Ss Bio ¢: »  Bit | ftw) ¥E 2  a  fe 2S 4) a9  i _ ' a  ms y ial 
-- key_ocr_after: wt  ; ie  ’ ? e +35% oy Sy oS a oF ay +420% ar : Bla oS ol ole & +1 5 3 a - a eZ, ey | a- qi a +50% ' bx 30% a | -  +50% ’ ied +4 re 4 a oI) +10 | comer ser | :  ft a = jo dit 
+- key_ocr_after: wt  ; ie  ’ ? e +35% oy Sy oS a oF ay +420% ar : Bla oS ol ole & +1  5  3 a - a eZ, ey | a- qi a +50% ' bx  30% a | -  +50% ’ ied +4 re  4 a oI) +10 | comer ser | :  ft a = jo dit 
 
 ## G0 Plumbing Gate — 2026-07-28 03:08:51
 
@@ -221,8 +221,8 @@ doppler run -- python spine/run.py --reflex-only
 - capture_resolution: 2562x1479
 - capture_mean_brightness: 92.02
 - key_diff: 0.0276
-- key_ocr_before: Character Selection a: fal al B14 | | S| fi a) BE Of w | =oF B= - =~} # a # R J 4 40 $ we Rami ia sls * “ F a = OU Al @) ec & Fk pa Ambrojoe | ) — § 1 (mwenons:6 | ||) gs ba be Fy 
-- key_ocr_after: Rockstar | 28029 | — | : Ne a FR : if ua ve ad & ef Ramba | : B® Go Mel va | & ' ° : Ambrojoe i >. & r oF “h — _ 7) a : A) 7) «| 22? 22? 2??? = i cy ] eam ff LS ee, “ (=) 
+- key_ocr_before: Character Selection a: fal al B14 | | S| fi a) BE Of w | =oF B= - =~} # a # R J 4 40 . wis Ramba a ~~ - Gst6 b: : F a — OU Al @) ec & Fk ! 7 Am
+- key_ocr_after: Rockstar | 28029 | — | : Ne a FR : if ua ve ad & ef Ramba | : B® Go Mel va | & : ° : Ambrojoe i >. & r oF “h — _ 7) a : A) 7) «| 22? 22? 2??? = i cy ] eam ff LS ee, “ (=) 
 
 ## G0 Plumbing Gate — 2026-07-28 03:13:25
 
@@ -250,7 +250,8 @@ doppler run -- python spine/run.py --reflex-only
 - capture_mean_brightness: 68.26
 - key_diff: 0.0253
 - key_ocr_before: — 7 Rockstar 28029 L | = i r. ‘ , ae) Stage Selection " Moongolow Legend tells of a city swallowed by the r fis i sea under a full moon’s callous watch. F | Pai Home to mysteries u
-- key_ocr_after: Rockstar &: 28029 (_ mx } _ L . , re Stage Selection I 5 . 1 "a Fate chan by th inute i 1m F ‘ate ges by the minute in a rea. . ASHORE SionaIhL where mortals can only trespass. Wha
+- key_ocr_after: Rockstar & 28029 ack io” oO Stage Selection Green Acres Fate changes by the minute in a realm where mortals can only trespass. What oft rs or] rewards await those who challenge its
+- stage_text: ROCKSTAR STAGE SELECTION GREEN ACRES (ENOIBLENICYE THE BONE ZONE <——2CHALLENGES WHITEOUT FATE CHANGES BY THE MINUTE IN A REALM WHERE MORTALS CAN ONLY TRESPASS. WHAT REWARDS AWAIT T
 
 ## G0 Plumbing Gate — 2026-07-28 03:14:02
 
@@ -410,11 +411,34 @@ doppler run -- python spine/run.py --reflex-only
 - key_ocr_before: a —— Rockstar (\& 28029] ~(=e)- E=_ | <p I Th r " a nd  . B 1B) Z +368 & a A 4. vw g — bie | i +403 1 rn +21% "iy  & a 7 ok qi ® _ s *- mn Ea Q 2 bd +31% 55 = zs es fee ; +50% : : 
 - key_ocr_after: Bh Vampire survivors = o x Rockstar " | 28029 | [_sacx ) (mercer) ms . Ss = i" & - ——= = ae Character Selection 7 ; | ' Te. P ih ; | «| Pall Ra) ih . A cl a Dy : ] @ =" ¢ a : | 2 «
 
-## G0 Plumbing Gate — 2026-07-31 03:09:22
+## Live vertical slice (first real run under LangGraph + Codex SDK) — 2026-07-31
 
-**Verdict:** FAILED
+**Verdict:** IN PROGRESS — live loop proven end-to-end; game process exited mid-run (no crash record).
 
-**Results:**
-- launch: FAIL (game window not available after launch)
+**Command:**
+```
+.venv\Scripts\python.exe spine\run.py --entry-only --goal "Reach an in-game Mad Forest HUD as Antonio with all six modifiers false. Prefer keyboard. Stop once the run has started." --thread-id "g0-vision-fullscreen"
+```
 
-**Evidence:**
+**Proven live:**
+- WGC capture of the running game returned exactly 2560x1440, mean brightness 46.09,
+  and `assert_capture_contract` PASSED against `capture_calibration_resolution`.
+- Full vertical slice executed: prepare -> observe -> real OAuth leader (gpt-5.6-luna)
+  -> schema-valid menu actions -> controller sent real keyboard input -> re-observe.
+  Evidence: 7 saved observation keyframes in `episodes/run_1785488771608/keyframes/`.
+- Input visibly changed the screen: consecutive-frame mean abs diffs up to 63.3
+  (0->1 0.052, 1->2 63.323, 2->3 0.673, 3->4 0.787, 4->5 11.165, 5->6 8.674).
+  Controller evidence: `menu:confirm`, `menu:start`, `menu:up` x4.
+
+**Live bug found and FIXED (commit 878446c):**
+- First run failed at the SDK call: `invalid_request_error 'allOf' is not permitted`
+  for `codex_output_schema`. `MENU_LEADER_SCHEMA` had an `allOf`/`if`/`then`/`else`
+  conditional that the Codex SDK rejects. Flattened the schema; the
+  click-when-action=click invariant is enforced deterministically by
+  `SpineGameTools.menu_action`. 87 unit tests pass.
+
+**Open issue (next G0 blocker):**
+- After 6 inputs the game window vanished; process `VampireSurvivors` is gone.
+  Windows Application event log shows no crash record for the game in the last hour,
+  so it exited/closed without a crash. Relaunch fresh and retry; monitor whether the
+  instance survives the run.
