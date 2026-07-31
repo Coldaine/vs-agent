@@ -70,6 +70,8 @@ class ScriptedModel:
 
 
 class ScriptedTools:
+    writer = None  # match the real SpineGameTools attribute for logging
+
     def __init__(
         self,
         observations: list[dict],

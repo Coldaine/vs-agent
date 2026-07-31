@@ -47,6 +47,8 @@ class RecordingCodexClient:
 
 
 class RecordingTools:
+    writer = None  # match real SpineGameTools
+
     def __init__(self, *args, fail_model=False, **kwargs) -> None:
         self.events = []
         self.observations = [

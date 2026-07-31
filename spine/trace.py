@@ -11,11 +11,39 @@ class EpisodeWriter:
         os.makedirs(os.path.join(self.dir, "keyframes"), exist_ok=True)
         self._states = open(os.path.join(self.dir, "states.jsonl"), "a")
         self._planner = open(os.path.join(self.dir, "planner.jsonl"), "a")
+        self._entry = open(os.path.join(self.dir, "entry.jsonl"), "a")
+        self._entry_step = 0
         self.t0 = time.monotonic()
         self._closed = False
 
     def t(self) -> float:
         return time.monotonic() - self.t0
+
+    def log_menu_turn(self, *, screen_in, ocr_hint="", leader_screen=None,
+                      leader_action=None, leader_click=None,
+                      leader_ready=None, leader_reason=None,
+                      controller_evidence="", steps_left=None):
+        """Log one menu-entry cycle: observe -> leader -> action.
+
+        Called from the goal graph after each observe node and after each
+        menu_action / promote_in_game node.  `leader_*` fields are None on
+        the initial observe (before the first leader turn).
+        """
+        self._entry.write(json.dumps({
+            "step": self._entry_step,
+            "t": round(self.t(), 2),
+            "screen_in": screen_in,
+            "ocr_hint": ocr_hint[:200],
+            "leader_screen": leader_screen,
+            "leader_action": leader_action,
+            "leader_click": leader_click,
+            "leader_ready": leader_ready,
+            "leader_reason": leader_reason,
+            "controller_evidence": controller_evidence,
+            "steps_left": steps_left,
+        }) + "\n")
+        self._entry_step += 1
+        self._entry.flush()
 
     def log_tick(self, hp, level, timer, inventory, threats, gems,
                  rule_fired, latency_ms, action, reflex_override):
@@ -83,6 +111,7 @@ class EpisodeWriter:
     def _close_streams(self) -> None:
         self._states.close()
         self._planner.close()
+        self._entry.close()
         self._closed = True
 
 

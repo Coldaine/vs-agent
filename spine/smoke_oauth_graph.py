@@ -158,6 +158,8 @@ def validate_smoke_result(result: dict) -> dict:
 
 
 class SmokeGameTools:
+    writer = None  # match real SpineGameTools for goal_graph node compatibility
+
     def __init__(self, image_path: Path) -> None:
         self.observations = [
             {

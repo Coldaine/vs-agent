@@ -147,9 +147,16 @@ def build_goal_graph(
 
     def observe(state: GoalState, runtime: Runtime[AgentRuntime]) -> dict:
         tools = _runtime_tools(runtime)
+        obs = tools.observe()
+        if tools.writer is not None:
+            tools.writer.log_menu_turn(
+                screen_in=str(obs.get("screen_type", "UNKNOWN")),
+                ocr_hint=str(obs.get("ocr_hint", "")),
+                steps_left=state.get("menu_steps_left"),
+            )
         return {
             "phase": "observed",
-            "observation": tools.observe(),
+            "observation": obs,
             "tool_state": _tool_state(tools),
         }
 
@@ -221,12 +228,24 @@ def build_goal_graph(
         return "menu_action"
 
     def promote_in_game(state: GoalState, runtime: Runtime[AgentRuntime]) -> dict:
+        tools = _runtime_tools(runtime)
         decision = state["leader_decision"] or {}
         claimed = str(decision.get("screen") or "IN_GAME")
         _runtime_tools(runtime).mark_in_game()
         observation = dict(state["observation"] or {})
         observation["screen_type"] = "LEVEL_UP" if claimed == "LEVEL_UP" else "PLAY"
         observation["promoted_by_vision"] = True
+        if tools.writer is not None:
+            tools.writer.log_menu_turn(
+                screen_in=str(observation.get("screen_type", "PLAY")),
+                leader_screen=str(decision.get("screen", "")),
+                leader_action=str(decision.get("action", "")),
+                leader_click=decision.get("click"),
+                leader_ready=bool(decision.get("ready_for_run")),
+                leader_reason=str(decision.get("reason", "")),
+                controller_evidence=f"vision-promote:{claimed}",
+                steps_left=state.get("menu_steps_left"),
+            )
         return {
             "phase": "in_game",
             "observation": observation,
@@ -255,6 +274,17 @@ def build_goal_graph(
         click = decision.get("click")
         steps_left = state["menu_steps_left"] - 1
         if action == "wait":
+            if tools.writer is not None:
+                tools.writer.log_menu_turn(
+                    screen_in=str((state.get("observation") or {}).get("screen_type", "UNKNOWN")),
+                    leader_screen=str(decision.get("screen", "")),
+                    leader_action="wait",
+                    leader_click=None,
+                    leader_ready=bool(decision.get("ready_for_run")),
+                    leader_reason=str(decision.get("reason", "")),
+                    controller_evidence="menu:wait",
+                    steps_left=steps_left,
+                )
             return {
                 "phase": "menu_acted",
                 "menu_steps_left": steps_left,
@@ -264,16 +294,39 @@ def build_goal_graph(
             result = tools.menu_action(action, click=click)
         except Exception as error:
             tools.neutralize()
+            if tools.writer is not None:
+                tools.writer.log_menu_turn(
+                    screen_in=str((state.get("observation") or {}).get("screen_type", "UNKNOWN")),
+                    leader_screen=str(decision.get("screen", "")),
+                    leader_action=str(action),
+                    leader_click=click,
+                    leader_ready=bool(decision.get("ready_for_run")),
+                    leader_reason=str(decision.get("reason", "")),
+                    controller_evidence=f"ERROR: {error}",
+                    steps_left=steps_left,
+                )
             return {
                 "phase": "blocked",
                 "status": "blocked",
                 "reason": f"menu action failed: {error}",
                 "menu_steps_left": steps_left,
             }
+        evidence = result.get("evidence", [])
+        if tools.writer is not None:
+            tools.writer.log_menu_turn(
+                screen_in=str((state.get("observation") or {}).get("screen_type", "UNKNOWN")),
+                leader_screen=str(decision.get("screen", "")),
+                leader_action=str(action),
+                leader_click=click,
+                leader_ready=bool(decision.get("ready_for_run")),
+                leader_reason=str(decision.get("reason", "")),
+                controller_evidence=",".join(evidence),
+                steps_left=steps_left,
+            )
         return {
             "phase": "menu_acted",
             "menu_steps_left": steps_left,
-            "evidence": [*state["evidence"], *result.get("evidence", [])],
+            "evidence": [*state["evidence"], *evidence],
         }
 
     def route_menu_action(state: GoalState) -> str:
