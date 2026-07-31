@@ -4,6 +4,11 @@
 
 **Status:** COMPLETE — live gameplay calibration remains a separate G0 gate
 
+**Implementation note:** This checklist began with a subprocess adapter design.
+That design was superseded by `spine/codex_sdk_client.py`, which is the active
+official SDK/app-server boundary. The earlier Task 1 subprocess steps remain
+historical execution records, not instructions to restore that adapter.
+
 **Goal:** Replace the bespoke model-orchestration loop with a durable LangGraph goal runtime whose leader and follower both run as `gpt-5.6-luna` through the user's existing ChatGPT Pro OAuth login in the local Codex CLI.
 
 **Architecture:** LangGraph owns goal state, phase transitions, checkpoints, leader/follower invocation, and completion evaluation. Existing `spine` modules remain the deterministic game boundary. Instead of the older subprocess wrapper invoking `codex exec`, the runtime now directly uses the official `openai-codex` SDK to interact with the Codex app-server, while the repository never reads, copies, logs, or stores OAuth credentials. Both leader and follower child subgraphs are compiled separately on disjoint schemas and run transparently on individual role thread bindings.

@@ -12,8 +12,8 @@ sub-second movement decisions per run, plus a few dozen slow,
 high-leverage build decisions. No single model is good at both, and no
 single latency budget serves both. So:
 
-- pilot: fast, cheap, narrow (one of 9 movement tokens).
-- planner: slower, smarter, rare (level-up picks, strategy briefs).
+- follower: fast, narrow (one of 9 movement tokens).
+- leader: slower, smarter, rare (level-up picks, strategy briefs).
 - BUILDER: never plays at all — maintains the system and the
   experiment loops.
 
@@ -25,15 +25,15 @@ gave us.
 ## 2. Why a deterministic controller owns the keyboard
 
 Because "the model said so" is not an arbitration policy. Three
-proposers (reflex, pilot, planner) need rules for who wins, and
+proposers (reflex, follower, leader) need rules for who wins, and
 those rules must be:
 
 - **Auditable** — every tick logs which rule fired, so post-mortems
-  can distinguish "pilot was wrong" from "pilot was right but
+  can distinguish "follower was wrong" from "follower was right but
   got vetoed."
 - **Tunable** — thresholds live in config.yaml so the experiment loop
   can hill-climb them like any other variable.
-- **Safe under latency** — the pilot is async; the controller acts
+- **Safe under latency** — the follower is async; the controller acts
   on the freshest valid proposal plus reflex, never blocking on the
   VLM. This is what makes a 300-500ms model viable in a game that
   punishes 500ms of paralysis.
@@ -56,7 +56,7 @@ Three measured problems:
    perception is YOLO-first, VLM for judgment.
 3. **Sub-4B models miss things on cluttered screens** (community
    probes show tiny models failing OCR and error-state detection).
-   Hence the pilot floor is 4B zero-shot, with sub-4B viable only
+   Hence the follower floor is 4B zero-shot, with sub-4B viable only
    after distillation on our own corpus.
 
 ## 4. Why two optimization loops (P and C)
@@ -104,9 +104,9 @@ This is the difference between fixing symptoms and fixing policy.
 ## 8. Why the corpus is the real product
 
 The endgame (gate G7) is a distilled micro-model — YOLO-class detector
-plus a ~5M-param policy net at ~5ms — replacing the VLM pilot.
+plus a ~5M-param policy net at ~5ms — replacing the VLM follower.
 That requires (frame, state, action) triples with quality labels.
-The VLM-pilot phase exists to manufacture that corpus: positive
+The VLM-follower phase exists to manufacture that corpus: positive
 examples from ticks where the agent survived the next 30s, corrective
 examples from reviewer-flagged errors, plus human demonstration runs.
 Without this plan, the project tops out at "a slow VLM plays okay
@@ -121,14 +121,15 @@ comparing noise. Fixed stage/character/seeds, 3-5 episodes, median not
 mean. If a change to eval conditions is ever truly needed, all
 champion scores are invalidated and re-baselined — never mixed.
 
-## 10. Why computer-control-mcp instead of custom capture code
+## 10. Why WGC through `io_adapter.py` instead of custom capture code
 
-Screen capture of games fails in a specific way: GPU-accelerated
-windows return black frames via traditional GDI screenshots. The MCP
-server already solves this (WGC capture path) plus input injection,
-OCR, and window management. Writing our own would be re-solving known
-problems for zero differentiation. Our differentiation is the
-controller, the loops, and the corpus — that's where the code goes.
+Screen capture of games fails in a specific way: GPU-accelerated windows
+return black frames via traditional GDI screenshots. `io_adapter.py` uses
+the WGC/DXCam path plus the calibrated input boundary, while launch and
+perception provide bounded menu/OCR helpers. Reusing those boundaries avoids
+re-solving capture and input synchronization in the graph. Our
+differentiation is the controller, the loops, and the corpus — that's where
+the code goes.
 
 ## 11. Why there is an explicit reasoning stage (the THEORIST)
 
@@ -173,7 +174,7 @@ and HOW MUCH. Without a named stage for this, loops degrade into
 Generic rubrics produce generic diagnoses. The controller already
 logs every arbitration event (rule_fired), so review.py scans for
 telemetry anomalies (override-rate spikes) and turns them into a
-specific question the autopsy must answer FIRST ("was the pilot
+specific question the autopsy must answer FIRST ("was the follower
 wrong, or the reflex layer over-sensitive?"). This is the difference
 between a post-mortem and a falsification tool. (Pattern borrowed
 from 3D-scene agent workflows, where the orchestrator passes an

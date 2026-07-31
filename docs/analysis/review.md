@@ -82,3 +82,26 @@ We recommend the following sequence of high-value refactors to eliminate naming 
 2. **Quarantine / Deprecate Model Client:** Ensure [vs-agent/spine/model_client.py](vs-agent/spine/model_client.py)'s public functions strictly assert the OAuth environment, match leader/follower naming conventions, and format model calls correctly as `call_leader` and `call_follower` in telemetry.
 3. **Reconcile Documentation:** Update [vs-agent/docs/plans/langgraph-chatgpt-pro-oauth.md](vs-agent/docs/plans/langgraph-chatgpt-pro-oauth.md) to officially deprecate the old subprocess design and point to the `openai-codex` SDK implementation.
 4. **Harden G0 Verification Pipeline:** Prepare [vs-agent/spine/verify_g0.py](vs-agent/spine/verify_g0.py) to run cleanly under fixed fullscreen bounds once the human prerequisites are completed.
+
+## Follow-up Review — 2026-07-31
+
+The initial audit overstated the safety of several boundaries. A second review
+found and fixed the following issues in separate domain commits:
+
+- **MUST-FIX, fixed in `e9ce24d`:** the direct SDK path did not reject inherited
+  API-key variables, accepted non-Pro ChatGPT metadata, allowed click payloads
+  to override a different action, and allowed frame-unbounded clicks. Invalid
+  level-up indices were also reaching the clamping selector. Regression tests
+  now cover each rejection path.
+- **MUST-FIX, fixed in `acb0922`:** checkpoint resume rebuilt real
+  `SpineGameTools` without its episode writer or active-run state. Checkpointed
+  tool state is now persisted and restored, interrupted writers emit invalid
+  terminal evidence, and resource construction is inside cleanup ownership.
+- **SHOULD-FIX, fixed in the current documentation commit:** active authority
+  docs and prompts now use `leader`/`follower` terminology and describe the
+  actual WGC/`io_adapter.py` boundary. `planner.jsonl` remains a documented
+  legacy artifact filename for append-only compatibility.
+
+Remaining live blockers are unchanged: G0 still needs unattended fullscreen
+evidence, six-modifier UI proof, attach/recovery proof, and the two-second
+movement check. The detector's gem/elite mapping is also not proven for G1.5.

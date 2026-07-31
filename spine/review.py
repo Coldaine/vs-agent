@@ -65,13 +65,13 @@ def review_run(run_dir: str):
 
     autopsy = model_client.call_subagent(
         autopsy_prompt, packet, keyframes=packet["keyframes"])
-    planner_path = os.path.join(run_dir, "leader.jsonl")
-    if not os.path.exists(planner_path):
-        planner_path = os.path.join(run_dir, "planner.jsonl")
-    planner_log = [json.loads(l) for l in open(planner_path)] \
-        if os.path.exists(planner_path) else []
+    leader_path = os.path.join(run_dir, "leader.jsonl")
+    if not os.path.exists(leader_path):
+        leader_path = os.path.join(run_dir, "planner.jsonl")
+    leader_log = [json.loads(l) for l in open(leader_path)] \
+        if os.path.exists(leader_path) else []
     build = model_client.call_subagent(
-        build_prompt, {"planner_log": planner_log, "outcome": packet["outcome"]})
+        build_prompt, {"leader_log": leader_log, "outcome": packet["outcome"]})
 
     with open("failures.jsonl", "a") as f:
         f.write(json.dumps({"run": run_dir, **autopsy}) + "\n")
@@ -89,4 +89,3 @@ def review_run(run_dir: str):
 
 if __name__ == "__main__":
     review_run(sys.argv[1])
-

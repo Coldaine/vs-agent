@@ -11,7 +11,7 @@ You receive a theory packet:
 - the keyframe strip for the failure window (8-12 JPEGs, some as
   before/during/after triplets)
 - the states.jsonl window around the event
-- the CURRENT prompts/pilot.md, prompts/planner.md, and
+- the CURRENT prompts/follower.md, prompts/leader.md, and
   spine/config.yaml
 - theories.jsonl entries for prior theories in the same failure class
 - the intervention ladder (below)

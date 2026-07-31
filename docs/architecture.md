@@ -10,7 +10,7 @@ OpenRouter API, DeepSeek API, or an OpenAI-compatible endpoint.
 
 The SDK/app-server owns authentication storage and refresh. Repository code
 checks only the SDK's public account metadata and requires
-`account.type == "chatgpt"`; it never opens, parses, copies, exports, prints, or
+`account.type == "chatgpt"` and `account.plan_type == "pro"`; it never opens, parses, copies, exports, prints, or
 commits OAuth credential material.
 
 Both temporary runtime roles are pinned to `gpt-5.6-luna`:
@@ -53,10 +53,10 @@ Runtime policy forbids these variables in the model process:
 - `OPENROUTER_API_KEY`
 - `DEEPSEEK_API_KEY`
 
-The compatibility helpers in `spine/model_client.py` reject them explicitly.
-The direct LangGraph path does not select an API provider from these variables;
-`CodexAgentClient.start()` requires the public SDK account representation to
-report `type=chatgpt`, which is the binding authentication check.
+The compatibility helpers and direct SDK client reject them explicitly before
+SDK startup. `CodexAgentClient.start()` requires the public SDK account
+representation to report `type=chatgpt` and `plan_type=pro`, which is the
+binding authentication check.
 
 Every model invocation uses these official SDK/app-server controls:
 

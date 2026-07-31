@@ -42,7 +42,7 @@ Evidence frames live in `status/`:
 1. [x] Attach mode + vision-led entry: `prepare()` launches/focuses only;
    LangGraph leader navigates menus via `menu_action`. OCR is a hint, not
    the navigator. `--entry-only` stops at the in-game HUD.
-2. Route an attached level-up through the existing planner/option selector,
+2. Route an attached level-up through the existing leader/option selector,
    then run the controller's reflex-only loop for the G1 movement check.
 3. [x] Two-second movement evidence path in `verify_g0.py` after vision entry.
    Still need a live `status/gates.md` PASS append.

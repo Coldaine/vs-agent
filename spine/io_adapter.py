@@ -3,7 +3,7 @@
 Route abstraction per docs/stack.md. Three candidate backends, tried in
 order (A/B/C with one bounded diagnostic cycle each):
   A. NitroGen GamepadEnv (DXcam capture + virtual gamepad + recording)
-  B. computer-control-mcp (WGC screenshot + keyboard)
+  B. WGC/DXCam capture plus the local input backend
   C. thin MCP facade over NitroGen GamepadEnv
 
 The builder implements the chosen backend behind this interface.

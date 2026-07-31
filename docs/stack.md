@@ -26,7 +26,7 @@ credential.
 Runtime policy forbids `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, and
 `DEEPSEEK_API_KEY`. Compatibility helpers reject populated values explicitly;
 the direct LangGraph path binds authentication by accepting only public SDK
-account metadata with `type=chatgpt`.
+account metadata with `type=chatgpt` and `plan_type=pro`.
 
 ## Why LangGraph
 

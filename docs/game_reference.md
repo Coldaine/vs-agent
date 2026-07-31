@@ -1,7 +1,7 @@
 # Game reference — Vampire Survivors (domain knowledge for all agents)
 
 This is the shared encyclopedia. The labeler uses it to label frames,
-the planner uses it for build decisions, the theorist uses it to form
+the leader uses it for build decisions, the theorist uses it to form
 causal claims, and the builder uses it to write sensible prompts.
 When this file and a model's intuition disagree, this file wins.
 (Scope: base game, Mad Forest, Antonio — the fixed eval conditions.
@@ -42,7 +42,7 @@ Re-verify numbers against current patch if behavior looks off.)
 - Chests from elites/bosses: can upgrade or EVOLVE weapons. Standing
   near a chest is safe; open it when the area is clear.
 
-## 3. Movement doctrine (the pilot's real curriculum)
+## 3. Movement doctrine (the follower's real curriculum)
 
 1. Never stop moving. A stationary agent is a dying agent. HOLD is
    only for a genuine safe pocket with all exits threatened.
@@ -70,7 +70,7 @@ Re-verify numbers against current patch if behavior looks off.)
    emptiest single octant — a single-octant gap is often a closing
    jaw.
 
-## 4. Build doctrine (the planner's curriculum)
+## 4. Build doctrine (the leader's curriculum)
 
 Antonio starts with Whip. Rules of thumb for Mad Forest:
 
